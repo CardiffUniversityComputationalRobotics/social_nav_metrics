@@ -145,34 +145,24 @@ class MetricsRecorder:
         rospy.on_shutdown(self.save_value_csv)
 
         # arrays for the metrics values to be stored
-
         self.rmi = np.array([], dtype=np.float64)
-
         self.sii = np.array([], dtype=np.float64)
-
         self.num_nodes = np.array([], dtype=np.int32)
-
         self.goal_reached = 0
-
         self.goal_available = False
-
         self.total_time = 0.0
-
         self.current_time = 0.0
-
         self.cpu = np.array([], dtype=np.float64)
-
         self.collision_counter = 0
 
         # ! configs values
-
         self.clock_topic = rospy.get_param("~clock_topic", "/clock")
         self.cpu_topic = rospy.get_param("~cpu_topic", "/cpu_monitor/planner/cpu")
-        self.result_topic = rospy.get_param("~result_topic", "/result_topic")
-        self.goal_topic = rospy.get_param("~goal_topic", "/goal_topic")
-        self.collision_counter_topic = rospy.get_param(
-            "~collision_counter_topic", "/collision_counter"
+        self.goal_reached_topic = rospy.get_param(
+            "~goal_reached_topic", "/goal_reached_topic"
         )
+        self.goal_topic = rospy.get_param("~goal_topic", "/goal_topic")
+        self.odom_topic = rospy.get_param("~odom_topic", "/odom")
         self.num_nodes_topic = rospy.get_param("~num_nodes_topic", "/num_nodes_topic")
 
         self.csv_dir = rospy.get_param("~csv_dir")
@@ -194,92 +184,7 @@ class MetricsRecorder:
             self.cpu_callback,
             queue_size=1,
         )
-
-        if self.solution_type == "smf_planner":
-            from smf_move_base_msgs.msg import Goto2DActionGoal, Goto2DActionResult
-
-            rospy.Subscriber(
-                self.result_topic,
-                Goto2DActionResult,
-                self.sample_goal_reached_callback,
-                queue_size=1,
-            )
-
-            rospy.Subscriber(
-                self.goal_topic,
-                Goto2DActionGoal,
-                self.sample_goal_available_callback,
-                queue_size=1,
-            )
-
-        elif self.solution_type == "esc_planner":
-
-            from esc_move_base_msgs.msg import Goto2DActionGoal, Goto2DActionResult
-
-            rospy.Subscriber(
-                self.result_topic,
-                Goto2DActionResult,
-                self.sample_goal_reached_callback,
-                queue_size=1,
-            )
-
-            rospy.Subscriber(
-                self.goal_topic,
-                Goto2DActionGoal,
-                self.sample_goal_available_callback,
-                queue_size=1,
-            )
-
-        elif self.solution_type == "sfm_planner":
-            from sfm_diff_drive.msg import SFMDriveActionResult, SFMDriveActionFeedback
-
-            rospy.Subscriber(
-                self.result_topic,
-                SFMDriveActionResult,
-                self.apf_goal_reached_callback,
-                queue_size=1,
-            )
-
-            rospy.Subscriber(
-                self.goal_topic,
-                SFMDriveActionFeedback,
-                self.apf_goal_available_callback,
-                queue_size=1,
-            )
-
-        elif self.solution_type == "psmm_planner":
-            from psmm_drive.msg import PSMMDriveActionResult, PSMMDriveActionFeedback
-
-            rospy.Subscriber(
-                self.result_topic,
-                PSMMDriveActionResult,
-                self.apf_goal_reached_callback,
-                queue_size=1,
-            )
-
-            rospy.Subscriber(
-                self.goal_topic,
-                PSMMDriveActionFeedback,
-                self.apf_goal_available_callback,
-                queue_size=1,
-            )
-
-        elif self.solution_type == "cadrl_planner":
-            from geometry_msgs.msg import PoseStamped
-
-            rospy.Subscriber(
-                self.result_topic,
-                Bool,
-                self.rl_goal_reached_callback,
-                queue_size=1,
-            )
-
-            rospy.Subscriber(
-                self.goal_topic,
-                PoseStamped,
-                self.rl_goal_available_callback,
-                queue_size=1,
-            )
+        rospy.Subscriber(self.goal_reached_topic, Bool, self.goal_reached_callback)
 
         rospy.Subscriber(
             self.collision_counter_topic,
@@ -295,43 +200,19 @@ class MetricsRecorder:
             queue_size=1,
         )
 
+        rospy.Subscriber(
+            self.goal_reached_topic,
+            Bool,
+            self.num_nodes_callback,
+            queue_size=1,
+        )
+
+    def goal_reached_callback(self, msg: Bool):
+        if msg.data:
+            self.goal_reached = True
+
     def clock_callback(self, msg):
         self.current_time = msg.clock.secs
-
-    def sample_goal_reached_callback(self, msg):
-        if msg.result.success and not self.goal_reached:
-            self.goal_reached = 1
-            self.total_time = abs(self.current_time - self.total_time)
-
-    def sample_goal_available_callback(self, msg):
-        if msg.goal:
-            if not self.goal_available:
-                self.goal_available = True
-                current_time_msg = rospy.wait_for_message("clock", Clock)
-                self.total_time = current_time_msg.clock.secs
-
-    def apf_goal_reached_callback(self, msg):
-        if msg.result.result == "waypoint reached" and not self.goal_reached:
-            self.goal_reached = 1
-            self.total_time = abs(self.current_time - self.total_time)
-
-    def apf_goal_available_callback(self, msg):
-        if msg.feedback.feedback == "robot moving":
-            if not self.goal_available:
-                self.goal_available = True
-                current_time_msg = rospy.wait_for_message("clock", Clock)
-                self.total_time = current_time_msg.clock.secs
-
-    def rl_goal_reached_callback(self, msg):
-        if msg.data and not self.goal_reached:
-            self.goal_reached = 1
-            self.total_time = abs(self.current_time - self.total_time)
-
-    def rl_goal_available_callback(self, msg):
-        if not self.goal_available:
-            self.goal_available = True
-            current_time_msg = rospy.wait_for_message("clock", Clock)
-            self.total_time = current_time_msg.clock.secs
 
     def cpu_callback(self, msg):
         if self.goal_available:
