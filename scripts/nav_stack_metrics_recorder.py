@@ -8,6 +8,7 @@ import numpy as np
 from rosgraph_msgs.msg import Clock
 from pedsim_msgs.msg import AgentStates
 from nav_msgs.msg import Odometry
+import math
 
 
 def import_csv(csvfilename):
@@ -47,7 +48,7 @@ class MetricsRecorder:
         last_data = None
         try:
             csv_read_data = import_csv(
-                self.csv_dir + self.solution_type + "/" + self.csv_name
+                self.csv_dir_ + self.solution_type_ + "/" + self.csv_name_
             )
             last_data = csv_read_data[-1]
         except Exception as _e:
@@ -55,13 +56,13 @@ class MetricsRecorder:
             # print(_e)
 
         rospy.loginfo("csv imported")
-        rospy.loginfo(self.csv_dir + self.solution_type + "/" + self.csv_name)
+        rospy.loginfo(self.csv_dir_ + self.solution_type_ + "/" + self.csv_name_)
         rospy.loginfo(last_data)
 
         with open(
-            self.csv_dir + self.solution_type + "/" + self.csv_name, "a", newline=""
+            self.csv_dir_ + self.solution_type_ + "/" + self.csv_name_, "a", newline=""
         ) as csvfile_write, open(
-            self.csv_dir + self.solution_type + "/" + self.csv_name,
+            self.csv_dir_ + self.solution_type_ + "/" + self.csv_name_,
             "r",
         ) as csvfile_read:
             reader = csv.reader(csvfile_read)
@@ -93,46 +94,46 @@ class MetricsRecorder:
             except:
                 writer.writeheader()
 
-            print("goal_reached: ", self.goal_reached)
+            rospy.loginfo("goal_reached: " + self.goal_reached_)
 
             if last_data is not None:
                 if (
-                    self.solution_type != "smf_planner"
-                    and self.solution_type != "esc_planner"
+                    self.solution_type_ != "smf_planner"
+                    and self.solution_type_ != "esc_planner"
                 ):
-                    self.num_nodes = 0
+                    self.num_nodes_ = 0
 
                 writer.writerow(
                     {
                         "test_number": int(last_data[1]) + 1,
                         "time": dt_string,
-                        "goal_reached": self.goal_reached,
-                        "average_sii": round(np.average(self.sii), 2),
-                        "average_rmi": round(np.average(self.rmi), 2),
-                        "total_time": self.total_time,
-                        "average_cpu": round(np.average(self.cpu_list), 2),
-                        "collision_counter": self.collision_counter,
-                        "num_nodes": int(np.average(self.num_nodes)),
+                        "goal_reached": self.goal_reached_,
+                        "average_sii": round(np.average(self.sii_), 2),
+                        "average_rmi": round(np.average(self.rmi_), 2),
+                        "total_time": self.total_time_,
+                        "average_cpu": round(np.average(self.cpu_list_), 2),
+                        "collision_counter": self.collision_counter_,
+                        "num_nodes": int(np.average(self.num_nodes_)),
                     }
                 )
             else:
                 if (
-                    self.solution_type != "smf_planner"
-                    and self.solution_type != "esc_planner"
+                    self.solution_type_ != "smf_planner"
+                    and self.solution_type_ != "esc_planner"
                 ):
-                    self.num_nodes = 0
+                    self.num_nodes_ = 0
 
                 writer.writerow(
                     {
                         "test_number": 1,
                         "time": dt_string,
-                        "goal_reached": self.goal_reached,
-                        "average_sii": round(np.average(self.sii), 2),
-                        "average_rmi": round(np.average(self.rmi), 2),
-                        "total_time": self.total_time,
-                        "average_cpu": round(np.average(self.cpu_list), 2),
-                        "collision_counter": self.collision_counter,
-                        "num_nodes": int(np.average(self.num_nodes)),
+                        "goal_reached": self.goal_reached_,
+                        "average_sii": round(np.average(self.sii_), 2),
+                        "average_rmi": round(np.average(self.rmi_), 2),
+                        "total_time": self.total_time_,
+                        "average_cpu": round(np.average(self.cpu_list_), 2),
+                        "collision_counter": self.collision_counter_,
+                        "num_nodes": int(np.average(self.num_nodes_)),
                     }
                 )
             print("[INFO] [" + str(rospy.get_time()) + "] metrics for test saved.")
@@ -141,102 +142,247 @@ class MetricsRecorder:
 
     def __init__(self):
 
-        rospy.init_node("metrics_recorder", anonymous=True)
+        rospy.init_node("social_nav_metrics_recorder", anonymous=True)
 
         rospy.on_shutdown(self.save_value_csv)
 
-        # arrays for the metrics values to be stored
+        # ! RECORDING VARIABLES
+        # POSITIONS
+        self.robot_position_ = None
+        self.agent_states_ = None
 
-        self.robot_position = None
-        # self.
+        # SOCIAL NAVIGATION COMMON METRICS
+        self.rmi_ = np.array([], dtype=np.float64)
+        self.sii_ = np.array([], dtype=np.float64)
+        self.collision_counter_ = 0
+        self.goal_reached_ = 0
 
-        self.rmi = np.array([], dtype=np.float64)
-        self.sii = np.array([], dtype=np.float64)
-        self.num_nodes = np.array([], dtype=np.int32)
-        self.goal_reached = 0
-        self.goal_available = False
-        self.total_time = 0.0
-        self.current_time = 0.0
-        self.current_cpu = 0
-        self.cpu_list = np.array([], dtype=np.float64)
-        self.collision_counter = 0
-        self.last_time = 0
+        # LAMBDA FUNCTIONS
+        self.rmi_value = (
+            lambda v_r, beta, v_a, alpha, x_agent, y_agent, x_robot, y_robot: (
+                2 + v_r * np.cos(beta) + v_a * np.cos(alpha)
+            )
+            / (np.sqrt(math.pow(x_agent - x_robot, 2) + math.pow(y_agent - y_robot, 2)))
+        )
+        self.sii_value = lambda x_agent, y_agent, x_robot, y_robot: (
+            math.pow(
+                math.e,
+                -(
+                    math.pow(
+                        (x_robot - x_agent) / (self.final_sigma),
+                        2,
+                    )
+                    + math.pow(
+                        (y_robot - y_agent) / (self.final_sigma),
+                        2,
+                    )
+                ),
+            )
+        )
 
-        # ! configs values
-        self.clock_topic = rospy.get_param("~clock_topic", "/clock")
-        self.cpu_topic = rospy.get_param("~cpu_topic", "/cpu_monitor/planner/cpu")
-        self.goal_reached_topic = rospy.get_param(
+        self.num_nodes_ = np.array([], dtype=np.int32)
+
+        # GOAL FLAG
+        self.goal_available_ = False
+
+        # TIME VARIABLES
+        self.total_time_ = 0.0
+        self.current_time_ = 0.0
+        self.last_time_ = 0
+
+        self.cpu_list_ = np.array([], dtype=np.float64)
+
+        # ! CONFIGS VALUES
+        # TOPICS
+        self.clock_topic_ = rospy.get_param("~clock_topic", "/clock")
+        self.cpu_topic_ = rospy.get_param("~cpu_topic", "/cpu_monitor/planner/cpu")
+        self.goal_reached_topic_ = rospy.get_param(
             "~goal_reached_topic", "/goal_reached_topic"
         )
-        self.goal_topic = rospy.get_param("~goal_topic", "/goal_topic")
-        self.odom_topic = rospy.get_param("~odom_topic", "/odom")
+        self.goal_topic_ = rospy.get_param("~goal_topic", "/goal_topic")
+        self.odom_topic_ = rospy.get_param("~odom_topic", "/odom")
         self.num_nodes_topic = rospy.get_param("~num_nodes_topic", "/num_nodes_topic")
-        self.measure_rate = rospy.get_param("~measure_rate", 5)
-        self.measure_period = 1 / self.measure_rate
+        self.agents_states_topic_ = rospy.get_param(
+            "~agents_states_topic", "/pedsim_simulator/simulated_agents"
+        )
 
-        self.csv_dir = rospy.get_param("~csv_dir")
-        self.solution_type = rospy.get_param("~solution_type")
-        self.csv_name = rospy.get_param("~csv_name")
+        # RATE PARAM
+        self.measure_rate_ = rospy.get_param("~measure_rate", 5)
+        self.measure_period_ = 1 / self.measure_rate_
+
+        # CSV SAVING PARAMS
+        self.csv_dir_ = rospy.get_param("~csv_dir")
+        self.solution_type_ = rospy.get_param("~solution_type")
+        self.csv_name_ = rospy.get_param("~csv_name")
 
         #! SUBSCRIBERS
-
         rospy.Subscriber(
-            self.clock_topic,
+            self.clock_topic_,
             Clock,
             self.clock_callback,
             queue_size=1,
         )
-
         rospy.Subscriber(
-            self.cpu_topic,
+            self.cpu_topic_,
             Float32,
             self.cpu_callback,
             queue_size=1,
         )
-
         rospy.Subscriber(
             self.num_nodes_topic,
             Int32,
             self.num_nodes_callback,
             queue_size=1,
         )
-
         rospy.Subscriber(
-            self.goal_reached_topic,
+            self.goal_reached_topic_,
             Bool,
             self.num_nodes_callback,
             queue_size=1,
         )
-
-        rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback)
-
-        rospy.Subscriber(self.goal_reached_topic, Bool, self.goal_reached_callback)
+        rospy.Subscriber(
+            self.agents_states_topic_, AgentStates, self.agents_callback, queue_size=1
+        )
+        rospy.Subscriber(self.odom_topic_, Odometry, self.odom_callback)
+        rospy.Subscriber(self.goal_reached_topic_, Bool, self.goal_reached_callback)
 
     def goal_reached_callback(self, msg: Bool):
         if msg.data:
-            self.goal_reached = True
+            self.goal_reached_ = True
 
-    def clock_callback(self, msg):
-        self.current_time = msg.clock.secs
+    def clock_callback(self, msg: Clock):
+        self.current_time_ = msg.clock.secs
 
     def cpu_callback(self, msg):
-        if self.goal_available:
-            self.current_cpu = np.append(self.cpu_list, msg.data)
+        if self.goal_available_:
+            self.current_cpu_ = np.append(self.cpu_list_, msg.data)
 
     def collision_counter_callback(self, msg):
-        self.collision_counter = msg.data
+        self.collision_counter_ = msg.data
 
     def num_nodes_callback(self, msg):
-        if self.goal_available:
-            self.num_nodes = np.append(self.num_nodes, msg.data)
+        if self.goal_available_:
+            self.num_nodes_ = np.append(self.num_nodes_, msg.data)
+
+    def odom_callback(self, odom: Odometry):
+        self.robot_position_ = odom.pose
+
+    def agents_callback(self, agents: AgentStates):
+        self.agent_states_ = agents.agent_states
+
+    def calculate_rmi(self):
+        last_rmi = 0
+
+        for agent in agents_list:
+
+            v_r = np.sqrt(
+                math.pow(robot_odometry.twist.twist.linear.x, 2)
+                + math.pow(robot_odometry.twist.twist.linear.y, 2)
+            )
+
+            # angle between robot orientation and vector robot-agent
+            beta = math.atan2(
+                agent.pose.position.y - robot_odometry.pose.pose.position.y,
+                agent.pose.position.x - robot_odometry.pose.pose.position.x,
+            )
+
+            # beta = np.arctan2((state_r2->values[1] - agentState.pose.position.y),
+            #                            (state_r2->values[0] - agentState.pose.position.x)))
+
+            if beta < 0:
+                beta = 2 * math.pi + beta
+
+            quaternion = (
+                robot_odometry.pose.pose.orientation.x,
+                robot_odometry.pose.pose.orientation.y,
+                robot_odometry.pose.pose.orientation.z,
+                robot_odometry.pose.pose.orientation.w,
+            )
+            euler = tf.transformations.euler_from_quaternion(quaternion)
+            yaw = euler[2]
+
+            # robot_angle = math.pi / 2 + yaw
+
+            if yaw < 0:
+                yaw = 2 * math.pi + yaw
+
+            if beta > (yaw + math.pi):
+                beta = abs(yaw + 2 * math.pi - beta)
+            elif yaw > (beta + math.pi):
+                beta = abs(beta + 2 * math.pi - yaw)
+            else:
+                beta = abs(beta - yaw)
+
+            # beta = abs(robot_angle - beta)
+
+            # if robot_angle > beta:
+            #     robot_angle - beta
+            # elif robot_angle < beta:
+            #     beta - robot_angle
+            # else:
+            #     beta = 0
+
+            v_a = np.sqrt(
+                math.pow(agent.twist.linear.x, 2) + math.pow(agent.twist.linear.y, 2)
+            )
+
+            alpha = math.atan2(
+                robot_odometry.pose.pose.position.y - agent.pose.position.y,
+                robot_odometry.pose.pose.position.x - agent.pose.position.x,
+            )
+
+            if alpha < 0:
+                alpha = 2 * math.pi + alpha
+
+            # beta = np.arctan2((state_r2->values[1] - agentState.pose.position.y),
+            #                            (state_r2->values[0] - agentState.pose.position.x)))
+
+            quaternion = (
+                agent.pose.orientation.x,
+                agent.pose.orientation.y,
+                agent.pose.orientation.z,
+                agent.pose.orientation.w,
+            )
+            euler = tf.transformations.euler_from_quaternion(quaternion)
+            yaw = euler[2]
+
+            if yaw < 0:
+                yaw = 2 * math.pi + yaw
+
+            if alpha > (yaw + math.pi):
+                alpha = abs(yaw + 2 * math.pi - alpha)
+            elif yaw > (alpha + math.pi):
+                alpha = abs(alpha + 2 * math.pi - yaw)
+            else:
+                alpha = abs(alpha - yaw)
+
+            # agent_angle = math.pi / 2 + yaw
+
+            # alpha = abs(agent_angle - alpha)
+
+            current_rmi = rmi_value(
+                v_r,
+                beta,
+                v_a,
+                alpha,
+                agent.pose.position.x,
+                agent.pose.position.y,
+                robot_odometry.pose.pose.position.x,
+                robot_odometry.pose.pose.position.y,
+            )
+
+            if current_rmi > last_rmi:
+                last_rmi = current_rmi
+
+        return last_rmi
 
     def run(self):
 
         while not rospy.is_shutdown():
-            if self.last_time - self.current_time <= self.measure_period:
-                np.append(self.cpu_list, self.current_cpu)
+            if self.last_time_ - self.current_time_ <= self.measure_period_:
+                np.append(self.cpu_list_, self.current_cpu_)
 
-                self.last_time = self.current_time
+                self.last_time_ = self.current_time_
 
 
 if __name__ == "__main__":
