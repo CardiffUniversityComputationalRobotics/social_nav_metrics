@@ -2,11 +2,12 @@
 
 import csv
 from datetime import datetime
-
 import rospy
 from std_msgs.msg import Float32, Int32, Bool
 import numpy as np
 from rosgraph_msgs.msg import Clock
+from pedsim_msgs.msg import AgentStates
+from nav_msgs.msg import Odometry
 
 
 def import_csv(csvfilename):
@@ -109,7 +110,7 @@ class MetricsRecorder:
                         "average_sii": round(np.average(self.sii), 2),
                         "average_rmi": round(np.average(self.rmi), 2),
                         "total_time": self.total_time,
-                        "average_cpu": round(np.average(self.cpu), 2),
+                        "average_cpu": round(np.average(self.cpu_list), 2),
                         "collision_counter": self.collision_counter,
                         "num_nodes": int(np.average(self.num_nodes)),
                     }
@@ -129,7 +130,7 @@ class MetricsRecorder:
                         "average_sii": round(np.average(self.sii), 2),
                         "average_rmi": round(np.average(self.rmi), 2),
                         "total_time": self.total_time,
-                        "average_cpu": round(np.average(self.cpu), 2),
+                        "average_cpu": round(np.average(self.cpu_list), 2),
                         "collision_counter": self.collision_counter,
                         "num_nodes": int(np.average(self.num_nodes)),
                     }
@@ -145,6 +146,10 @@ class MetricsRecorder:
         rospy.on_shutdown(self.save_value_csv)
 
         # arrays for the metrics values to be stored
+
+        self.robot_position = None
+        # self.
+
         self.rmi = np.array([], dtype=np.float64)
         self.sii = np.array([], dtype=np.float64)
         self.num_nodes = np.array([], dtype=np.int32)
@@ -152,8 +157,10 @@ class MetricsRecorder:
         self.goal_available = False
         self.total_time = 0.0
         self.current_time = 0.0
-        self.cpu = np.array([], dtype=np.float64)
+        self.current_cpu = 0
+        self.cpu_list = np.array([], dtype=np.float64)
         self.collision_counter = 0
+        self.last_time = 0
 
         # ! configs values
         self.clock_topic = rospy.get_param("~clock_topic", "/clock")
@@ -164,12 +171,14 @@ class MetricsRecorder:
         self.goal_topic = rospy.get_param("~goal_topic", "/goal_topic")
         self.odom_topic = rospy.get_param("~odom_topic", "/odom")
         self.num_nodes_topic = rospy.get_param("~num_nodes_topic", "/num_nodes_topic")
+        self.measure_rate = rospy.get_param("~measure_rate", 5)
+        self.measure_period = 1 / self.measure_rate
 
         self.csv_dir = rospy.get_param("~csv_dir")
         self.solution_type = rospy.get_param("~solution_type")
         self.csv_name = rospy.get_param("~csv_name")
 
-        #! subcribers
+        #! SUBSCRIBERS
 
         rospy.Subscriber(
             self.clock_topic,
@@ -182,14 +191,6 @@ class MetricsRecorder:
             self.cpu_topic,
             Float32,
             self.cpu_callback,
-            queue_size=1,
-        )
-        rospy.Subscriber(self.goal_reached_topic, Bool, self.goal_reached_callback)
-
-        rospy.Subscriber(
-            self.collision_counter_topic,
-            Int32,
-            self.collision_counter_callback,
             queue_size=1,
         )
 
@@ -207,6 +208,10 @@ class MetricsRecorder:
             queue_size=1,
         )
 
+        rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback)
+
+        rospy.Subscriber(self.goal_reached_topic, Bool, self.goal_reached_callback)
+
     def goal_reached_callback(self, msg: Bool):
         if msg.data:
             self.goal_reached = True
@@ -216,7 +221,7 @@ class MetricsRecorder:
 
     def cpu_callback(self, msg):
         if self.goal_available:
-            self.cpu = np.append(self.cpu, msg.data)
+            self.current_cpu = np.append(self.cpu_list, msg.data)
 
     def collision_counter_callback(self, msg):
         self.collision_counter = msg.data
@@ -224,6 +229,14 @@ class MetricsRecorder:
     def num_nodes_callback(self, msg):
         if self.goal_available:
             self.num_nodes = np.append(self.num_nodes, msg.data)
+
+    def run(self):
+
+        while not rospy.is_shutdown():
+            if self.last_time - self.current_time <= self.measure_period:
+                np.append(self.cpu_list, self.current_cpu)
+
+                self.last_time = self.current_time
 
 
 if __name__ == "__main__":

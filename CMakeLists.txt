@@ -7,7 +7,6 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   pedsim_msgs
-  pedsim_ros
 )
 
 
