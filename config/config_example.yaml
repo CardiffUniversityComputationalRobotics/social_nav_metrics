@@ -1,0 +1,27 @@
+# !TOPICS
+clock_topic: "/clock"
+cpu_topic: "/cpu_monitor/sfm_drive_node/cpu"
+goal_reached_topic: "/goal_reached"
+goal_topic: "/goal_query"
+collision_counter_topic: "/collision_counter"
+num_nodes_topic: "/num_nodes" # only considered if the approach is sampling based
+agent_states_topic: "/pedsim_simulator/simulated_agents"
+
+# octomap service
+octomap_service: /octomap_binary
+
+#! robot and agents params
+robot_radius: 0.2
+robot_height: 1.0
+agent_radius: 0.45
+
+# ! measuring characteristics
+measure_rate: 0.5
+sim: False # whether the test is being done in simulation or real experiment
+
+#! saving files config
+csv_dir: "/home/sasm/ros/noetic/system/src/pepper_social_nav_tests/results/"
+solution_type: "sfm_planner"
+csv_name: "18_02_roman.csv"
+
+max_test_time: 500

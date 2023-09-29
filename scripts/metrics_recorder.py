@@ -3,13 +3,14 @@
 import csv
 from datetime import datetime
 import rospy
-from std_msgs.msg import Float32, Int32, Bool, Float64
+from std_msgs.msg import Float32, Int32, Bool
 import numpy as np
 from rosgraph_msgs.msg import Clock
 from pedsim_msgs.msg import AgentStates
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Pose
 import math
 import tf
+import time
 
 
 def import_csv(csvfilename):
@@ -98,12 +99,6 @@ class MetricsRecorder:
             rospy.loginfo("goal_reached: " + self.goal_reached_)
 
             if last_data is not None:
-                if (
-                    self.solution_type_ != "smf_planner"
-                    and self.solution_type_ != "esc_planner"
-                ):
-                    self.num_nodes_ = 0
-
                 writer.writerow(
                     {
                         "test_number": int(last_data[1]) + 1,
@@ -118,12 +113,6 @@ class MetricsRecorder:
                     }
                 )
             else:
-                if (
-                    self.solution_type_ != "smf_planner"
-                    and self.solution_type_ != "esc_planner"
-                ):
-                    self.num_nodes_ = 0
-
                 writer.writerow(
                     {
                         "test_number": 1,
@@ -191,13 +180,16 @@ class MetricsRecorder:
 
         # TIME VARIABLES
         self.total_time_ = 0.0
+        self.init_query_time_ = 0.0
         self.current_time_ = 0.0
         self.last_time_ = 0
 
         self.cpu_list_ = np.array([], dtype=np.float64)
 
         # ! CONFIGS VALUES
-        # TOPICS
+        # ===============================================
+
+        # ? TOPICS
         self.clock_topic_ = rospy.get_param("~clock_topic", "/clock")
         self.cpu_topic_ = rospy.get_param("~cpu_topic", "/cpu_monitor/planner/cpu")
         self.goal_reached_topic_ = rospy.get_param(
@@ -209,23 +201,30 @@ class MetricsRecorder:
         self.agents_states_topic_ = rospy.get_param(
             "~agents_states_topic", "/pedsim_simulator/simulated_agents"
         )
+        self.collision_counter_topic_ = rospy.get_param(
+            "~collision_counter_topic", "/collision_counter"
+        )
 
-        # RATE PARAM
+        # ? RATE PARAM
         self.measure_rate_ = rospy.get_param("~measure_rate", 5)
         self.measure_period_ = 1 / self.measure_rate_
+        self.sim = rospy.get_param("~sim", True)
 
-        # CSV SAVING PARAMS
+        # ? CSV SAVING PARAMS
         self.csv_dir_ = rospy.get_param("~csv_dir")
         self.solution_type_ = rospy.get_param("~solution_type")
         self.csv_name_ = rospy.get_param("~csv_name")
+        # ================================================
 
         #! SUBSCRIBERS
-        rospy.Subscriber(
-            self.clock_topic_,
-            Clock,
-            self.clock_callback,
-            queue_size=1,
-        )
+        # ================================================
+        if self.sim:
+            rospy.Subscriber(
+                self.clock_topic_,
+                Clock,
+                self.clock_callback,
+                queue_size=1,
+            )
         rospy.Subscriber(
             self.cpu_topic_,
             Float32,
@@ -238,10 +237,11 @@ class MetricsRecorder:
             self.num_nodes_callback,
             queue_size=1,
         )
+        rospy.Subscriber(self.goal_topic_, Pose, self.goal_callback, queue_size=1)
         rospy.Subscriber(
             self.goal_reached_topic_,
             Bool,
-            self.num_nodes_callback,
+            self.goal_reached_callback,
             queue_size=1,
         )
         rospy.Subscriber(
@@ -249,24 +249,38 @@ class MetricsRecorder:
         )
         rospy.Subscriber(self.odom_topic_, Odometry, self.odom_callback)
         rospy.Subscriber(self.goal_reached_topic_, Bool, self.goal_reached_callback)
+        rospy.Subscriber(
+            self.collision_counter_topic_, Int32, self.collision_counter_callback
+        )
+        # ======================================================
+
+    # ! CALLBACKS
+    # ===============================================
+
+    def goal_callback(self, goal: Pose):
+        if not self.sim:
+            self.init_query_time_ = time.time()
+        else:
+            self.init_query_time_ = self.current_time_
+        self.goal_available_ = True
 
     def goal_reached_callback(self, msg: Bool):
         if msg.data:
             self.goal_reached_ = True
+            self.total_time_ = time.time() - self.init_query_time_
 
     def clock_callback(self, msg: Clock):
         self.current_time_ = msg.clock.secs
 
     def cpu_callback(self, msg):
         if self.goal_available_:
-            self.current_cpu_ = np.append(self.cpu_list_, msg.data)
+            self.current_cpu_ = msg.data
 
     def collision_counter_callback(self, msg):
         self.collision_counter_ = msg.data
 
     def num_nodes_callback(self, msg):
-        if self.goal_available_:
-            self.num_nodes_ = np.append(self.num_nodes_, msg.data)
+        self.num_nodes_ = msg.data
 
     def odom_callback(self, odom: Odometry):
         self.robot_position_ = odom.pose
@@ -275,30 +289,35 @@ class MetricsRecorder:
     def agents_callback(self, agents: AgentStates):
         self.agent_states_ = agents.agent_states
 
+    # =================================================
+
+    # ! SOCIAL NAVIGATION SPECIFIC METRICS CALCULATIONS FUNCTIONS
+    # =================================================
+
     def calculate_rmi(self):
         last_rmi = 0
 
         for agent in self.agent_states_:
             v_r = np.sqrt(
                 math.pow(self.robot_velocities_.twist.linear.x, 2)
-                + math.pow(self.robot_velocities_.twist.twist.linear.y, 2)
+                + math.pow(self.robot_velocities_.twist.linear.y, 2)
             )
 
-            # angle between robot orientation and vector robot-agent
             beta = math.atan2(
-                agent.pose.position.y - self.robot_position_.pose.pose.position.y,
-                agent.pose.position.x - self.robot_position_.pose.pose.position.x,
+                agent.pose.position.y - self.robot_position_.pose.position.y,
+                agent.pose.position.x - self.robot_position_.pose.position.x,
             )
 
             if beta < 0:
                 beta = 2 * math.pi + beta
 
             quaternion = (
-                self.robot_position_.pose.pose.orientation.x,
-                self.robot_position_.pose.pose.orientation.y,
-                self.robot_position_.pose.pose.orientation.z,
-                self.robot_position_.pose.pose.orientation.w,
+                self.robot_position_.pose.orientation.x,
+                self.robot_position_.pose.orientation.y,
+                self.robot_position_.pose.orientation.z,
+                self.robot_position_.pose.orientation.w,
             )
+
             euler = tf.transformations.euler_from_quaternion(quaternion)
             yaw = euler[2]
 
@@ -317,8 +336,8 @@ class MetricsRecorder:
             )
 
             alpha = math.atan2(
-                self.robot_position_.pose.pose.position.y - agent.pose.position.y,
-                self.robot_position_.pose.pose.position.x - agent.pose.position.x,
+                self.robot_position_.pose.position.y - agent.pose.position.y,
+                self.robot_position_.pose.position.x - agent.pose.position.x,
             )
 
             if alpha < 0:
@@ -350,8 +369,8 @@ class MetricsRecorder:
                 alpha,
                 agent.pose.position.x,
                 agent.pose.position.y,
-                self.robot_position_.pose.pose.position.x,
-                self.robot_position_.pose.pose.position.y,
+                self.robot_position_.pose.position.x,
+                self.robot_position_.pose.position.y,
             )
 
             if current_rmi > last_rmi:
@@ -359,12 +378,36 @@ class MetricsRecorder:
 
         return last_rmi
 
+    def calculate_sii(self):
+        last_sii = 0
+        current_sii = 0
+        for agent in self.agent_states_:
+            current_sii = self.sii_value(
+                agent.pose.position.x,
+                agent.pose.position.y,
+                self.robot_position_.pose.position.x,
+                self.robot_position_.pose.position.y,
+            )
+            if current_sii > last_sii:
+                last_sii = current_sii
+
+        return last_sii
+
+    # ========================================================
+
     def run(self):
         while not rospy.is_shutdown():
-            if self.last_time_ - self.current_time_ <= self.measure_period_:
-                np.append(self.cpu_list_, self.current_cpu_)
+            if self.goal_available_:
+                if not self.sim:
+                    self.current_time_ = time.time()
+                if self.current_time_ - self.last_time_ >= self.measure_period_:
+                    np.append(self.cpu_list_, self.current_cpu_)
+                    rmi = self.calculate_rmi()
+                    np.append(self.rmi_, rmi)
+                    sii = self.calculate_sii()
+                    np.append(self.sii_, sii)
 
-                self.last_time_ = self.current_time_
+                    self.last_time_ = self.current_time_
 
 
 if __name__ == "__main__":

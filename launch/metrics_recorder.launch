@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<launch>
+    <node pkg="social_nav_metrics" type="metrics_recorder.py" name="metrics_recorder_node" output="screen">
+        <rosparam command="load" file="$(find social_nav_metrics)/config/config_example.yaml"/>
+    </node>
+
+    <node pkg="social_nav_metrics" type="collision_counter" name="collision_counter_node" output="screen">
+        <rosparam command="load" file="$(find social_nav_metrics)/config/config_example.yaml"/>
+    </node>
+</launch>
