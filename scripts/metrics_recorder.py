@@ -126,7 +126,7 @@ class MetricsRecorder:
                         "num_nodes": int(np.average(self.num_nodes_)),
                     }
                 )
-            print("[INFO] [" + str(rospy.get_time()) + "] metrics for test saved.")
+            rospy.loginfo("Metrics for test saved.")
             csvfile_write.close()
             csvfile_read.close()
 
@@ -279,7 +279,10 @@ class MetricsRecorder:
     def goal_reached_callback(self, msg: Bool):
         if msg.data:
             self.goal_reached_ = 1
-            self.total_time_ = time.time() - self.init_query_time_
+            if not self.sim:
+                self.total_time_ = time.time() - self.init_query_time_
+            else:
+                self.total_time_ = self.current_time_ - self.init_query_time_
 
     def clock_callback(self, msg: Clock):
         self.current_time_ = msg.clock.secs
@@ -416,18 +419,18 @@ class MetricsRecorder:
                     if self.current_cpu_:
                         self.cpu_list_ = np.append(self.cpu_list_, self.current_cpu_)
                     if self.current_num_nodes_:
-                        print(self.num_nodes_)
-                        print(self.current_num_nodes_)
                         self.num_nodes_ = np.append(
                             self.num_nodes_, self.current_num_nodes_
                         )
-                        print(self.num_nodes_)
-                    if self.robot_velocities_ and self.robot_position_:
+                    if (
+                        self.robot_velocities_
+                        and self.robot_position_
+                        and self.agent_states_
+                    ):
                         rmi = self.calculate_rmi()
                         self.rmi_ = np.append(self.rmi_, rmi)
                         sii = self.calculate_sii()
                         self.sii_ = np.append(self.sii_, sii)
-                    # print("grbando")
 
                     self.last_time_ = self.current_time_
                     rospy.sleep(0.001)

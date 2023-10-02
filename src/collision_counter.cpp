@@ -68,6 +68,8 @@ int main(int argc, char **argv)
 
     bool foundCollision = false;
 
+    ROS_INFO_STREAM("PUBLISHING COLLISION COUNTER============================");
+
     while (ros::ok())
     {
 
@@ -154,9 +156,11 @@ int main(int argc, char **argv)
         std_msgs::Int32 collisionCounterMsg;
         collisionCounterMsg.data = collisionCounter;
 
+        ROS_INFO_STREAM("PUBLISHING COLLISION COUNTER");
+
         collisionCounterPub.publish(collisionCounterMsg);
 
-        ros::spinOnce();
+        loop_rate.sleep();
     }
 
     return 0;
