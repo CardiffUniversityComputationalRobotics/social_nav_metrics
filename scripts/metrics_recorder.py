@@ -7,7 +7,7 @@ from std_msgs.msg import Float32, Int32, Bool
 import numpy as np
 from rosgraph_msgs.msg import Clock
 from pedsim_msgs.msg import AgentStates
-from nav_msgs.msg import Odometry, Pose
+from nav_msgs.msg import Odometry
 import math
 import tf
 import time
@@ -96,7 +96,7 @@ class MetricsRecorder:
             except:
                 writer.writeheader()
 
-            rospy.loginfo("goal_reached: " + self.goal_reached_)
+            rospy.loginfo("goal_reached: " + str(self.goal_reached_))
 
             if last_data is not None:
                 writer.writerow(
@@ -146,8 +146,11 @@ class MetricsRecorder:
         # SOCIAL NAVIGATION COMMON METRICS
         self.rmi_ = np.array([], dtype=np.float64)
         self.sii_ = np.array([], dtype=np.float64)
+        self.num_nodes_ = np.array([], dtype=np.int32)
         self.collision_counter_ = 0
         self.goal_reached_ = 0
+        self.current_cpu_ = None
+        self.current_num_nodes_ = None
 
         # LAMBDA FUNCTIONS
         self.rmi_value = (
@@ -173,7 +176,17 @@ class MetricsRecorder:
             )
         )
 
-        self.num_nodes_ = np.array([], dtype=np.int32)
+        # ! SII VARIABLES
+
+        """d_c: is the desirable value of the distance between the robot and the 
+        agents, can be around 0.45m and 1.2m according to Hall depending on the
+        culture
+        """
+        self.d_c = 1.2
+        self.sigma_p = self.d_c / 2
+        self.final_sigma = math.sqrt(2) * self.sigma_p
+
+        # ===========================
 
         # GOAL FLAG
         self.goal_available_ = False
@@ -237,7 +250,7 @@ class MetricsRecorder:
             self.num_nodes_callback,
             queue_size=1,
         )
-        rospy.Subscriber(self.goal_topic_, Pose, self.goal_callback, queue_size=1)
+        rospy.Subscriber(self.goal_topic_, Bool, self.goal_callback, queue_size=1)
         rospy.Subscriber(
             self.goal_reached_topic_,
             Bool,
@@ -248,7 +261,6 @@ class MetricsRecorder:
             self.agents_states_topic_, AgentStates, self.agents_callback, queue_size=1
         )
         rospy.Subscriber(self.odom_topic_, Odometry, self.odom_callback)
-        rospy.Subscriber(self.goal_reached_topic_, Bool, self.goal_reached_callback)
         rospy.Subscriber(
             self.collision_counter_topic_, Int32, self.collision_counter_callback
         )
@@ -257,7 +269,7 @@ class MetricsRecorder:
     # ! CALLBACKS
     # ===============================================
 
-    def goal_callback(self, goal: Pose):
+    def goal_callback(self, goal_available: Bool):
         if not self.sim:
             self.init_query_time_ = time.time()
         else:
@@ -266,7 +278,7 @@ class MetricsRecorder:
 
     def goal_reached_callback(self, msg: Bool):
         if msg.data:
-            self.goal_reached_ = True
+            self.goal_reached_ = 1
             self.total_time_ = time.time() - self.init_query_time_
 
     def clock_callback(self, msg: Clock):
@@ -280,7 +292,7 @@ class MetricsRecorder:
         self.collision_counter_ = msg.data
 
     def num_nodes_callback(self, msg):
-        self.num_nodes_ = msg.data
+        self.current_num_nodes_ = msg.data
 
     def odom_callback(self, odom: Odometry):
         self.robot_position_ = odom.pose
@@ -401,16 +413,26 @@ class MetricsRecorder:
                 if not self.sim:
                     self.current_time_ = time.time()
                 if self.current_time_ - self.last_time_ >= self.measure_period_:
-                    np.append(self.cpu_list_, self.current_cpu_)
-                    rmi = self.calculate_rmi()
-                    np.append(self.rmi_, rmi)
-                    sii = self.calculate_sii()
-                    np.append(self.sii_, sii)
+                    if self.current_cpu_:
+                        self.cpu_list_ = np.append(self.cpu_list_, self.current_cpu_)
+                    if self.current_num_nodes_:
+                        print(self.num_nodes_)
+                        print(self.current_num_nodes_)
+                        self.num_nodes_ = np.append(
+                            self.num_nodes_, self.current_num_nodes_
+                        )
+                        print(self.num_nodes_)
+                    if self.robot_velocities_ and self.robot_position_:
+                        rmi = self.calculate_rmi()
+                        self.rmi_ = np.append(self.rmi_, rmi)
+                        sii = self.calculate_sii()
+                        self.sii_ = np.append(self.sii_, sii)
+                    # print("grbando")
 
                     self.last_time_ = self.current_time_
+                    rospy.sleep(0.001)
 
 
 if __name__ == "__main__":
     csv_counter_saver = MetricsRecorder()
-    while not rospy.is_shutdown():
-        rospy.spin()
+    csv_counter_saver.run()
