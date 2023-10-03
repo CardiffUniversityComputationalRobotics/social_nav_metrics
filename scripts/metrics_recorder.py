@@ -140,7 +140,6 @@ class MetricsRecorder:
             csvfile_read.close()
 
     def __init__(self):
-
         rospy.init_node("social_nav_metrics_recorder", anonymous=True)
 
         rospy.on_shutdown(self.save_value_csv)
@@ -219,13 +218,15 @@ class MetricsRecorder:
         self.clock_topic_ = rospy.get_param("~clock_topic", "/clock")
         self.cpu_topic_ = rospy.get_param("~cpu_topic", "/cpu_monitor/planner/cpu")
         self.goal_reached_topic_ = rospy.get_param(
-            "~goal_reached_topic", "/goal_reached_topic"
+            "~goal_reached_topic", "/goal_reached"
         )
-        self.goal_topic_ = rospy.get_param("~goal_topic", "/goal_topic")
+        self.goal_available_topic_ = rospy.get_param(
+            "~goal_available_topic", "/goal_available"
+        )
         self.odom_topic_ = rospy.get_param("~odom_topic", "/odom")
-        self.num_nodes_topic = rospy.get_param("~num_nodes_topic", "/num_nodes_topic")
+        self.num_nodes_topic = rospy.get_param("~num_nodes_topic", "/num_nodes")
         self.agents_states_topic_ = rospy.get_param(
-            "~agents_states_topic", "/pedsim_simulator/simulated_agents"
+            "~agent_states_topic", "/pedsim_simulator/simulated_agents"
         )
         self.collision_counter_topic_ = rospy.get_param(
             "~collision_counter_topic", "/collision_counter"
@@ -263,7 +264,9 @@ class MetricsRecorder:
             self.num_nodes_callback,
             queue_size=1,
         )
-        rospy.Subscriber(self.goal_topic_, Bool, self.goal_callback, queue_size=1)
+        rospy.Subscriber(
+            self.goal_available_topic_, Bool, self.goal_callback, queue_size=1
+        )
         rospy.Subscriber(
             self.goal_reached_topic_,
             Bool,
