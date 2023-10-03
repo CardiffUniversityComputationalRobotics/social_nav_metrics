@@ -21,7 +21,7 @@ measure_rate: 0.5
 sim: True # whether the test is being done in simulation or real experiment
 
 #! saving files config
-csv_dir: "/home/sasm/ros/noetic/system/src/pepper_social_nav_tests/results/"
+csv_dir: "/home/sasm/ros/noetic/system/src/pepper_social_nav_tests/results"
 approach_name: "smf_planner"
 csv_name: "new_test.csv"
 

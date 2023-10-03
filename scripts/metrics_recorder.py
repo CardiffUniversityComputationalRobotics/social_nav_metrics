@@ -2,19 +2,19 @@
 
 import csv
 from datetime import datetime
+import math
+import time
+import tf
 import rospy
 from std_msgs.msg import Float32, Int32, Bool
 import numpy as np
 from rosgraph_msgs.msg import Clock
 from pedsim_msgs.msg import AgentStates
 from nav_msgs.msg import Odometry
-import math
-import tf
-import time
 
 
 def import_csv(csvfilename):
-    """opens and return all content from csv in an array"""
+    """Opens and return all content from a CSV in an array"""
     data = []
     with open(csvfilename, "r", encoding="utf-8", errors="ignore") as scraped:
         reader = csv.reader(scraped, delimiter=",")
@@ -39,33 +39,44 @@ def import_csv(csvfilename):
 
 
 class MetricsRecorder:
-    """This class manages the state of the agents based on it position and time"""
+    """This class manages the measurement of the included metrics for social robot navigation
+    and saves the metrics on a CSV"""
 
     def save_value_csv(self):
-        print("About to save data")
-        """saves value of the metrics recorded in a csv"""
+        """Saves value of the measured metrics in a new or previously given csv"""
+        rospy.loginfo("About to save test measurements.")
+
         now = datetime.now()
         dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
 
         last_data = None
         try:
             csv_read_data = import_csv(
-                self.csv_dir_ + self.approach_name_ + "/" + self.csv_name_
+                self.csv_dir_ + "/" + self.approach_name_ + "/" + self.csv_name_
             )
             last_data = csv_read_data[-1]
-        except Exception as _e:
-            pass
-            # print(_e)
+        except OSError:
+            rospy.logwarn("Could not open the defined CSV file")
 
-        rospy.loginfo("csv imported")
-        rospy.loginfo(self.csv_dir_ + self.approach_name_ + "/" + self.csv_name_)
-        rospy.loginfo(last_data)
+        rospy.loginfo(
+            "Provided CSV at "
+            + self.csv_dir_
+            + "/"
+            + self.approach_name_
+            + "/"
+            + self.csv_name_
+            + " has been imported."
+        )
 
         with open(
-            self.csv_dir_ + self.approach_name_ + "/" + self.csv_name_, "a", newline=""
+            self.csv_dir_ + "/" + self.approach_name_ + "/" + self.csv_name_,
+            "a",
+            newline="",
+            encoding="utf-8",
         ) as csvfile_write, open(
-            self.csv_dir_ + self.approach_name_ + "/" + self.csv_name_,
+            self.csv_dir_ + "/" + self.approach_name_ + "/" + self.csv_name_,
             "r",
+            encoding="utf-8",
         ) as csvfile_read:
             reader = csv.reader(csvfile_read)
             fieldnames = [
@@ -95,8 +106,6 @@ class MetricsRecorder:
                     writer.writeheader()
             except:
                 writer.writeheader()
-
-            rospy.loginfo("goal_reached: " + str(self.goal_reached_))
 
             if last_data is not None:
                 writer.writerow(
@@ -131,6 +140,7 @@ class MetricsRecorder:
             csvfile_read.close()
 
     def __init__(self):
+
         rospy.init_node("social_nav_metrics_recorder", anonymous=True)
 
         rospy.on_shutdown(self.save_value_csv)
@@ -152,7 +162,20 @@ class MetricsRecorder:
         self.current_cpu_ = None
         self.current_num_nodes_ = None
 
-        # LAMBDA FUNCTIONS
+        # ! SII VARIABLES
+
+        """d_c: is the desirable value of the distance between the robot and the 
+        agents, can be around 0.45m and 1.2m according to Hall depending on the
+        culture
+        """
+        self.d_c = 1.2
+        self.sigma_p = self.d_c / 2
+        self.final_sigma = math.sqrt(2) * self.sigma_p
+
+        # ====================================================
+
+        #! LAMBDA FUNCTIONS
+        # ? RELATIVE MOTION INDEX
         self.rmi_value = (
             lambda v_r, beta, v_a, alpha, x_agent, y_agent, x_robot, y_robot: (
                 2 + v_r * np.cos(beta) + v_a * np.cos(alpha)
@@ -160,6 +183,7 @@ class MetricsRecorder:
             / (np.sqrt(math.pow(x_agent - x_robot, 2) + math.pow(y_agent - y_robot, 2)))
         )
 
+        # ? SOCIAL INDIVIDUAL INDEX
         self.sii_value = lambda x_agent, y_agent, x_robot, y_robot: (
             math.pow(
                 math.e,
@@ -176,18 +200,6 @@ class MetricsRecorder:
             )
         )
 
-        # ! SII VARIABLES
-
-        """d_c: is the desirable value of the distance between the robot and the 
-        agents, can be around 0.45m and 1.2m according to Hall depending on the
-        culture
-        """
-        self.d_c = 1.2
-        self.sigma_p = self.d_c / 2
-        self.final_sigma = math.sqrt(2) * self.sigma_p
-
-        # ===========================
-
         # GOAL FLAG
         self.goal_available_ = False
 
@@ -198,6 +210,7 @@ class MetricsRecorder:
         self.last_time_ = 0
 
         self.cpu_list_ = np.array([], dtype=np.float64)
+        # ================================================
 
         # ! CONFIGS VALUES
         # ===============================================
@@ -270,6 +283,7 @@ class MetricsRecorder:
     # ===============================================
 
     def goal_callback(self, goal_available: Bool):
+        """Receives if the goal for the navigation query is already available."""
         if not self.sim:
             self.init_query_time_ = time.time()
         else:
@@ -277,6 +291,7 @@ class MetricsRecorder:
         self.goal_available_ = True
 
     def goal_reached_callback(self, msg: Bool):
+        """Receives if the robot has reached or not the goal"""
         if msg.data:
             self.goal_reached_ = 1
             if not self.sim:
@@ -285,31 +300,38 @@ class MetricsRecorder:
                 self.total_time_ = self.current_time_ - self.init_query_time_
 
     def clock_callback(self, msg: Clock):
+        """Listens to the gazebo clock time if simulation is running."""
         self.current_time_ = msg.clock.secs
 
     def cpu_callback(self, msg):
+        """Listens to the CPU power used by the navigation system"""
         if self.goal_available_:
             self.current_cpu_ = msg.data
 
     def collision_counter_callback(self, msg):
+        """Listens to the amount of collisions happening by an external node."""
         self.collision_counter_ = msg.data
 
     def num_nodes_callback(self, msg):
+        """Listens to the number of nodes sampled for the case of sampling based techniques"""
         self.current_num_nodes_ = msg.data
 
     def odom_callback(self, odom: Odometry):
+        """Listens to the odometry of the robot."""
         self.robot_position_ = odom.pose
         self.robot_velocities_ = odom.twist
 
     def agents_callback(self, agents: AgentStates):
+        """Listens to the states of social agents"""
         self.agent_states_ = agents.agent_states
 
     # =================================================
 
     # ! SOCIAL NAVIGATION SPECIFIC METRICS CALCULATIONS FUNCTIONS
     # =================================================
-
     def calculate_rmi(self):
+        """Calculates the relative motion index according to the robot
+        and surrounding social agents."""
         last_rmi = 0
 
         for agent in self.agent_states_:
@@ -394,6 +416,8 @@ class MetricsRecorder:
         return last_rmi
 
     def calculate_sii(self):
+        """Calculates the social individual index according to the robot
+        and surrounding social agents."""
         last_sii = 0
         current_sii = 0
         for agent in self.agent_states_:
@@ -411,6 +435,7 @@ class MetricsRecorder:
     # ========================================================
 
     def run(self):
+        """Manages the time passed and recording of the metrics"""
         while not rospy.is_shutdown():
             if self.goal_available_:
                 if not self.sim:
@@ -433,7 +458,7 @@ class MetricsRecorder:
                         self.sii_ = np.append(self.sii_, sii)
 
                     self.last_time_ = self.current_time_
-                    rospy.sleep(0.001)
+                    rospy.sleep(0.00001)
 
 
 if __name__ == "__main__":
