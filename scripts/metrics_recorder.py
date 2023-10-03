@@ -50,7 +50,7 @@ class MetricsRecorder:
         last_data = None
         try:
             csv_read_data = import_csv(
-                self.csv_dir_ + self.solution_type_ + "/" + self.csv_name_
+                self.csv_dir_ + self.approach_name_ + "/" + self.csv_name_
             )
             last_data = csv_read_data[-1]
         except Exception as _e:
@@ -58,13 +58,13 @@ class MetricsRecorder:
             # print(_e)
 
         rospy.loginfo("csv imported")
-        rospy.loginfo(self.csv_dir_ + self.solution_type_ + "/" + self.csv_name_)
+        rospy.loginfo(self.csv_dir_ + self.approach_name_ + "/" + self.csv_name_)
         rospy.loginfo(last_data)
 
         with open(
-            self.csv_dir_ + self.solution_type_ + "/" + self.csv_name_, "a", newline=""
+            self.csv_dir_ + self.approach_name_ + "/" + self.csv_name_, "a", newline=""
         ) as csvfile_write, open(
-            self.csv_dir_ + self.solution_type_ + "/" + self.csv_name_,
+            self.csv_dir_ + self.approach_name_ + "/" + self.csv_name_,
             "r",
         ) as csvfile_read:
             reader = csv.reader(csvfile_read)
@@ -225,7 +225,7 @@ class MetricsRecorder:
 
         # ? CSV SAVING PARAMS
         self.csv_dir_ = rospy.get_param("~csv_dir")
-        self.solution_type_ = rospy.get_param("~solution_type")
+        self.approach_name_ = rospy.get_param("~approach_name")
         self.csv_name_ = rospy.get_param("~csv_name")
         # ================================================
 

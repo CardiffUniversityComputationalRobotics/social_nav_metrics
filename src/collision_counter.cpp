@@ -36,7 +36,7 @@ using octomap_msgs::GetOctomap;
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "collision_counter_node");
-    ros::NodeHandle nh;
+    ros::NodeHandle nh("~");
 
     GetOctomap::Request req;
     GetOctomap::Response resp;
@@ -45,13 +45,13 @@ int main(int argc, char **argv)
 
     double robot_radius_, robot_height_, agent_radius_;
 
-    nh.getParam("robot_radius", robot_radius_);
-    nh.getParam("robot_height", robot_height_);
-    nh.getParam("agent_radius", agent_radius_);
-    nh.getParam("odom_topic", odom_topic_);
-    nh.getParam("agent_states_topic", agent_states_topic_);
-    nh.getParam("octomap_service", octomap_service_);
-    nh.getParam("collision_counter_topic", collision_counter_topic_);
+    nh.param("robot_height", robot_height_, robot_height_);
+    nh.param("robot_radius", robot_radius_, robot_radius_);
+    nh.param("agent_radius", agent_radius_, agent_radius_);
+    nh.param("odom_topic", odom_topic_, odom_topic_);
+    nh.param("agent_states_topic", agent_states_topic_, agent_states_topic_);
+    nh.param("octomap_service", octomap_service_, octomap_service_);
+    nh.param("collision_counter_topic", collision_counter_topic_, collision_counter_topic_);
 
     std::shared_ptr<fcl::Cylinder<float>> robot_collision_solid_;
     std::shared_ptr<fcl::Cylinder<float>> agent_collision_solid_;
@@ -64,11 +64,9 @@ int main(int argc, char **argv)
     bool inCollision = false;
     int collisionCounter = 0;
 
-    ros::Publisher collisionCounterPub = nh.advertise<std_msgs::Int32>(collision_counter_topic_, 10);
+    ros::Publisher collisionCounterPub = nh.advertise<std_msgs::Int32>(collision_counter_topic_, 1, true);
 
     bool foundCollision = false;
-
-    ROS_INFO_STREAM("PUBLISHING COLLISION COUNTER============================");
 
     while (ros::ok())
     {
@@ -155,8 +153,6 @@ int main(int argc, char **argv)
 
         std_msgs::Int32 collisionCounterMsg;
         collisionCounterMsg.data = collisionCounter;
-
-        ROS_INFO_STREAM("PUBLISHING COLLISION COUNTER");
 
         collisionCounterPub.publish(collisionCounterMsg);
 
