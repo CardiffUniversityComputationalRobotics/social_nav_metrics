@@ -6,7 +6,7 @@ This package is compounded of two nodes: `/metrics_recorder_node` and `/collisio
 
 ![](https://i.imgur.com/o3xbjtv.png)
 
-## Metrics recorder node
+## Metrics Recorder Node
 
 This node is in charge of recording different metrics for social robot navigation.
 
@@ -100,9 +100,7 @@ The name of the subscribers' topics are just defined as an example, but they may
 
   Number of collisions the robot had with common obstacles and social agents.
 
-### Services
-
-## Collision counter node
+## Collision Counter Node
 
 This node is in charge of checking if the robot has collided with surrounding objects and social agents.
 
@@ -150,6 +148,27 @@ The name of the subscribers' topics are just defined as an example, but they may
 
 ### Publishers
 
+- /collision_counter ([std_msgs/Int32](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Int32.html))
+
+  Number of collisions that the robot had during one of the tests.
+
 ### Services
 
-## Example of usage
+- octomap_service ([octomap_msgs/GetOctomap](http://docs.ros.org/en/melodic/api/octomap_msgs/html/srv/GetOctomap.html))
+
+  The `collision_counter_node` uses this service in order to obtain the octomap and do collision checking using `fcl`.
+
+## Demo
+
+### Dependencies
+
+This package is not dependent in
+
+### Install the package
+
+```bash
+cd catkin_ws/src
+git clone https://github.com/CardiffUniversityComputationalRobotics/social_nav_metrics.git
+cd ..
+catkin build
+```
