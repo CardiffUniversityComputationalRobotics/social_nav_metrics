@@ -160,15 +160,66 @@ The name of the subscribers' topics are just defined as an example, but they may
 
 ## Demo
 
-### Dependencies
-
-This package is not dependent in
-
 ### Install the package
 
 ```bash
 cd catkin_ws/src
 git clone https://github.com/CardiffUniversityComputationalRobotics/social_nav_metrics.git
 cd ..
+rosinstall . social_nav_metrics/dependencies.rosinstall
 catkin build
+```
+
+**Note:** When running `catkin build`, compiling the package may take some time becaude of `fcl` for Noetic.
+
+### Deploying the nodes
+
+Here you are provided with a `launch` file that can be used to deploy the code provided in this repo. Have in mind that it is not mandatory to run the `collision_counter` node. In this case we include it as part as our example using `octomap`, but you may replace it with any other node that counts the collisions for you and publish the number of collisions into the listening topic from the `metrics_recorder_node`.
+
+```xml
+<?xml version="1.0"?>
+<launch>
+    <node pkg="social_nav_metrics" type="metrics_recorder.py" name="metrics_recorder_node" output="screen">
+        <rosparam command="load" file="$(find social_nav_metrics)/config/config_example.yaml"/>
+    </node>
+
+    <node pkg="social_nav_metrics" type="collision_counter" name="collision_counter_node" output="screen">
+        <rosparam command="load" file="$(find social_nav_metrics)/config/config_example.yaml"/>
+    </node>
+</launch>
+```
+
+### Configuration file
+
+The configuration file `config_example.xml` used in the previous presented `launch` file is showed below:
+
+```yaml
+# !TOPICS
+clock_topic: "/clock"
+cpu_topic: "/cpu_monitor/smf_move_base_planner/cpu"
+goal_reached_topic: "/smf_move_base_planner/goal_reached"
+goal_topic: "/goal_available"
+collision_counter_topic: "/collision_counter"
+num_nodes_topic: "/smf_move_base_planner/smf_num_nodes" # only considered if the approach is sampling based
+agent_states_topic: "/pedsim_simulator/simulated_agents"
+odom_topic: "/pepper/odom_groundtruth"
+
+# octomap service
+octomap_service: /smf_move_base_mapper/get_binary
+
+#! robot and agents params
+robot_radius: 0.3
+robot_height: 1.0
+agent_radius: 0.45
+
+# ! measuring characteristics
+measure_rate: 0.5
+sim: True # whether the test is being done in simulation or real experiment
+
+#! saving files config
+csv_dir: "/home/sasm/ros/noetic/system/src/pepper_social_nav_tests/results"
+approach_name: "smf_planner"
+csv_name: "new_test.csv"
+
+max_test_time: 500
 ```
