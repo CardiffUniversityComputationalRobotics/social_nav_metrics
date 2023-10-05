@@ -1,0 +1,1 @@
+- git: {local-name: pedsim_ros, uri: 'git@github.com:CardiffUniversityComputationalRobotics/pedsim_ros.git', version: noetic-devel}
