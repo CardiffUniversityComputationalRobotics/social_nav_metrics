@@ -46,6 +46,7 @@ class MetricsRecorder:
         """Saves value of the measured metrics in a new or previously given csv"""
         rospy.loginfo("About to save test measurements.")
 
+        # in case num_nodes is not considered, just make it zero
         if len(self.num_nodes_) == 0:
             self.num_nodes_ = np.append(self.num_nodes_, 0)
 
