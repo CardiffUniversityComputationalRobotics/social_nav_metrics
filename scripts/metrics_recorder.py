@@ -291,10 +291,11 @@ class MetricsRecorder:
 
     def goal_callback(self, goal_available: Bool):
         """Receives if the goal for the navigation query is already available."""
-        if not self.sim:
-            self.init_query_time_ = time.time()
-        else:
-            self.init_query_time_ = self.current_time_
+        if self.init_query_time_ == 0:
+            if not self.sim:
+                self.init_query_time_ = time.time()
+            else:
+                self.init_query_time_ = self.current_time_
         self.goal_available_ = True
 
     def goal_reached_callback(self, msg: Bool):
