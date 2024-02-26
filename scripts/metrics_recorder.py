@@ -46,6 +46,9 @@ class MetricsRecorder:
         """Saves value of the measured metrics in a new or previously given csv"""
         rospy.loginfo("About to save test measurements.")
 
+        if len(self.num_nodes_) == 0:
+            self.num_nodes_ = np.append(self.num_nodes_, 0)
+
         now = datetime.now()
         dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
 
