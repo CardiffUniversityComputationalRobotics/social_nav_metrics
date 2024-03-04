@@ -149,7 +149,8 @@ class MetricsRecorder:
         rospy.on_shutdown(self.save_value_csv)
 
         # ! RECORDING VARIABLES
-        # POSITIONS
+        # POSITIONS AND ORIENTATIONS
+        self.past_robot_position_ = None
         self.robot_position_ = None
         self.agent_states_ = None
 
@@ -464,6 +465,11 @@ class MetricsRecorder:
                         self.rmi_ = np.append(self.rmi_, rmi)
                         sii = self.calculate_sii()
                         self.sii_ = np.append(self.sii_, sii)
+
+                        if self.past_robot_position_ and self.past_robot_velocities_:
+                            pass
+                        else:
+                            pass
 
                     self.last_time_ = self.current_time_
                     rospy.sleep(0.00001)
