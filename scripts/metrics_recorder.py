@@ -32,6 +32,7 @@ def import_csv(csvfilename):
                     row[5],
                     row[6],
                     row[7],
+                    row[8],
                 ]
                 data.append(columns)
         scraped.close()
@@ -93,6 +94,7 @@ class MetricsRecorder:
                 "average_cpu",
                 "collision_counter",
                 "num_nodes",
+                "path_irregularity",
             ]
             writer = csv.DictWriter(csvfile_write, fieldnames=fieldnames)
             try:
@@ -106,6 +108,7 @@ class MetricsRecorder:
                     "average_cpu",
                     "collision_counter",
                     "num_nodes",
+                    "path_irregularity",
                 ]:
                     writer.writeheader()
             except:
@@ -123,6 +126,9 @@ class MetricsRecorder:
                         "average_cpu": round(np.average(self.cpu_list_), 4),
                         "collision_counter": self.collision_counter_,
                         "num_nodes": int(np.average(self.num_nodes_)),
+                        "path_irregularity": round(
+                            np.average(self.path_irregularity_), 4
+                        ),
                     }
                 )
             else:
@@ -137,6 +143,9 @@ class MetricsRecorder:
                         "average_cpu": round(np.average(self.cpu_list_), 4),
                         "collision_counter": self.collision_counter_,
                         "num_nodes": int(np.average(self.num_nodes_)),
+                        "path_irregularity": round(
+                            np.average(self.path_irregularity_), 4
+                        ),
                     }
                 )
             rospy.loginfo("Metrics for test saved.")
@@ -156,6 +165,7 @@ class MetricsRecorder:
 
         # ROBOT VELOCITIES
         self.robot_velocities_ = None
+        self.past_robot_velocities_ = None
 
         # SOCIAL NAVIGATION COMMON METRICS
         self.rmi_ = np.array([], dtype=np.float64)
@@ -165,6 +175,12 @@ class MetricsRecorder:
         self.goal_reached_ = 0
         self.current_cpu_ = None
         self.current_num_nodes_ = None
+
+        self.path_irregularity_ = np.array([], dtype=np.float64)
+        self.acceleration_per_segment_ = 0
+
+        self.orientation_change_ = 0
+        self.trajectory_length_ = 0
 
         # ! SII VARIABLES
 
@@ -467,9 +483,62 @@ class MetricsRecorder:
                         self.sii_ = np.append(self.sii_, sii)
 
                         if self.past_robot_position_ and self.past_robot_velocities_:
-                            pass
+                            distance_change = math.sqrt(
+                                math.pow(
+                                    self.past_robot_position_.pose.position.x
+                                    - self.robot_position_.pose.position.x,
+                                    2,
+                                )
+                                + math.pow(
+                                    self.past_robot_position_.pose.position.y
+                                    - self.robot_position_.pose.position.y,
+                                    2,
+                                )
+                            )
+
+                            old_q = (
+                                self.past_robot_position_.pose.orientation.x,
+                                self.past_robot_position_.pose.orientation.y,
+                                self.past_robot_position_.pose.orientation.z,
+                                self.past_robot_position_.pose.orientation.w,
+                            )
+                            old_angle = tf.transformations.euler_from_quaternion(old_q)[
+                                2
+                            ]
+
+                            new_q = (
+                                self.robot_position_.pose.orientation.x,
+                                self.robot_position_.pose.orientation.y,
+                                self.robot_position_.pose.orientation.z,
+                                self.robot_position_.pose.orientation.w,
+                            )
+                            new_angle = tf.transformations.euler_from_quaternion(new_q)[
+                                2
+                            ]
+
+                            angle_change = abs(
+                                min(
+                                    (2 * math.pi) - abs(old_angle - new_angle),
+                                    abs(old_angle - new_angle),
+                                )
+                            )
+
+                            if distance_change > 0:
+                                path_irregularity = angle_change / distance_change
+                            else:
+                                path_irregularity = 100
+
+                            self.path_irregularity_ = np.append(
+                                self.path_irregularity_, path_irregularity
+                            )
+                            rospy.logwarn(path_irregularity)
+
+                            self.past_robot_position_ = self.robot_position_
+                            self.past_robot_velocities_ = self.robot_velocities_
+
                         else:
-                            pass
+                            self.past_robot_position_ = self.robot_position_
+                            self.past_robot_velocities_ = self.robot_velocities_
 
                     self.last_time_ = self.current_time_
                     rospy.sleep(0.00001)
