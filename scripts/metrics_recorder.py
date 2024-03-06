@@ -513,10 +513,12 @@ class MetricsRecorder:
 
     def calculate_acc_per_segment(self):
         acceleration_x = (
-            self.past_robot_velocities_.x - self.robot_velocities_.x
+            self.past_robot_velocities_.twist.linear.x
+            - self.robot_velocities_.twist.linear.x
         ) / self.measure_period_
         acceleration_y = (
-            self.past_robot_velocities_.y - self.robot_velocities_.y
+            self.past_robot_velocities_.twist.linear.y
+            - self.robot_velocities_.twist.linear.y
         ) / self.measure_period_
 
         res_acceleration = math.sqrt(
