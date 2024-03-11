@@ -509,6 +509,9 @@ class MetricsRecorder:
         else:
             path_irregularity = 100
 
+        if path_irregularity > 100:
+            path_irregularity = 100
+
         return path_irregularity
 
     def calculate_acc_per_segment(self):
@@ -589,7 +592,7 @@ class MetricsRecorder:
                             self.past_robot_velocities_ = self.robot_velocities_
 
                     self.last_time_ = self.current_time_
-                    rospy.sleep(0.00001)
+            rospy.sleep(0.0000001)
 
 
 if __name__ == "__main__":
