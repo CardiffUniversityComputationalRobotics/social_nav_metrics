@@ -264,7 +264,7 @@ class MetricsRecorder:
 
         # ? RATE PARAM
         self.measure_rate_ = rospy.get_param("~measure_rate", 5)
-        self.measure_period_ = 1 / self.measure_rate_
+        self.measure_period_ = float(1 / self.measure_rate_)
         self.sim = rospy.get_param("~sim", True)
 
         # ? CSV SAVING PARAMS
@@ -335,7 +335,7 @@ class MetricsRecorder:
 
     def clock_callback(self, msg: Clock):
         """Listens to the gazebo clock time if simulation is running."""
-        self.current_time_ = msg.clock.secs
+        self.current_time_ = msg.clock.secs + float(msg.clock.nsecs / 1000000000)
 
     def cpu_callback(self, msg):
         """Listens to the CPU power used by the navigation system"""
@@ -504,13 +504,13 @@ class MetricsRecorder:
             min((2 * math.pi) - abs(old_angle - new_angle), abs(old_angle - new_angle))
         )
 
-        if distance_change > 0:
+        if distance_change > 0.001:
             path_irregularity = float(angle_change / distance_change)
         else:
-            path_irregularity = 100
+            path_irregularity = -1
 
-        if path_irregularity > 100:
-            path_irregularity = 100
+        if path_irregularity > 10:
+            path_irregularity = 10
 
         return path_irregularity
 
@@ -541,7 +541,15 @@ class MetricsRecorder:
             )
         )
 
-        return float(res_acceleration / distance_change)
+        if distance_change > 0.001:
+            acc_per_segment = float(res_acceleration / distance_change)
+        else:
+            acc_per_segment = -1
+
+        if acc_per_segment > 30:
+            acc_per_segment = 30
+
+        return acc_per_segment
 
     # ========================================================
 
@@ -573,16 +581,18 @@ class MetricsRecorder:
                             # measure path irregularity
                             path_irregularity = self.calculate_path_irregularity()
 
-                            self.path_irregularity_ = np.append(
-                                self.path_irregularity_, path_irregularity
-                            )
+                            if path_irregularity >= 0:
+                                self.path_irregularity_ = np.append(
+                                    self.path_irregularity_, path_irregularity
+                                )
 
                             # measure aceleration per segment
                             acc_per_segment = self.calculate_acc_per_segment()
 
-                            self.acceleration_per_segment_ = np.append(
-                                self.acceleration_per_segment_, acc_per_segment
-                            )
+                            if acc_per_segment >= 0:
+                                self.acceleration_per_segment_ = np.append(
+                                    self.acceleration_per_segment_, acc_per_segment
+                                )
 
                             self.past_robot_position_ = self.robot_position_
                             self.past_robot_velocities_ = self.robot_velocities_
@@ -592,7 +602,7 @@ class MetricsRecorder:
                             self.past_robot_velocities_ = self.robot_velocities_
 
                     self.last_time_ = self.current_time_
-            rospy.sleep(0.0000001)
+            rospy.sleep(0.0001)
 
 
 if __name__ == "__main__":
