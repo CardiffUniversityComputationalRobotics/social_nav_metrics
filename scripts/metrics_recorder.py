@@ -34,6 +34,7 @@ def import_csv(csvfilename):
                     row[7],
                     row[8],
                     row[9],
+                    row[10],
                 ]
                 data.append(columns)
         scraped.close()
@@ -97,6 +98,7 @@ class MetricsRecorder:
                 "num_nodes",
                 "path_irregularity",
                 "acc_per_segment",
+                "path_length",
             ]
             writer = csv.DictWriter(csvfile_write, fieldnames=fieldnames)
             try:
@@ -112,6 +114,7 @@ class MetricsRecorder:
                     "num_nodes",
                     "path_irregularity",
                     "acc_per_segment",
+                    "path_length",
                 ]:
                     writer.writeheader()
             except:
@@ -135,6 +138,7 @@ class MetricsRecorder:
                         "acc_per_segment": round(
                             np.average(self.acceleration_per_segment_), 4
                         ),
+                        "path_length": self.path_length_,
                     }
                 )
             else:
@@ -155,6 +159,7 @@ class MetricsRecorder:
                         "acc_per_segment": round(
                             np.average(self.acceleration_per_segment_), 4
                         ),
+                        "path_length": self.path_length_,
                     }
                 )
             rospy.loginfo("Metrics for test saved.")
@@ -189,7 +194,7 @@ class MetricsRecorder:
         self.acceleration_per_segment_ = np.array([], dtype=np.float64)
 
         self.orientation_change_ = 0
-        self.trajectory_length_ = 0
+        self.path_length_ = 0
 
         # ! SII VARIABLES
 
@@ -540,6 +545,8 @@ class MetricsRecorder:
                 2,
             )
         )
+
+        self.path_length_ += distance_change
 
         if distance_change > 0.001:
             acc_per_segment = float(res_acceleration / distance_change)
