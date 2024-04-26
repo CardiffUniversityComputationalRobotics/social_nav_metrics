@@ -1,12 +1,23 @@
 # !TOPICS
-clock_topic: "/clock"
-cpu_topic: "/cpu_monitor/smf_move_base_planner/cpu"
-goal_reached_topic: "/smf_move_base_planner/goal_reached"
-goal_topic: "/goal_available"
-collision_counter_topic: "/collision_counter"
+# clock_topic: "/clock"
+# cpu_topic: "/cpu_monitor/smf_move_base_planner/cpu"
+# goal_reached_topic: "/smf_move_base_planner/goal_reached"
+# goal_topic: "/goal_available"
+# collision_counter_topic: "/collision_counter"
+# num_nodes_topic: "/smf_move_base_planner/smf_num_nodes" # only considered if the approach is sampling based
+# agent_states_topic: "/pedsim_simulator/simulated_agents"
+# odom_topic: "/pepper/odom_groundtruth"
+
+clock_topic: "/clock" # WORKS
+cpu_topic: "/cpu_monitor/smf_move_base_planner/cpu" # UNAVAILABLE
+goal_reached_topic: "/smf_move_base_planner/goal_reached" # UNAVAILABLE
+goal_topic: "/goal_available" # UNAVAILABLE
+collision_counter_topic: "/collision_counter" # UNAVAILABLE
 num_nodes_topic: "/smf_move_base_planner/smf_num_nodes" # only considered if the approach is sampling based
-agent_states_topic: "/pedsim_simulator/simulated_agents"
-odom_topic: "/pepper/odom_groundtruth"
+agent_states_topic: "/pedsim_simulator/simulated_agents" # WORKS
+# odom_topic: "/stretch_diff_drive_controller/odom" # WORKS
+
+odom_topic: "/ground_truth"
 
 # octomap service
 octomap_service: /smf_move_base_mapper/get_binary
@@ -21,8 +32,11 @@ measure_rate: 0.5
 sim: True # whether the test is being done in simulation or real experiment
 
 #! saving files config
-csv_dir: "/home/sasm/ros/noetic/system/src/pepper_social_nav_tests/results"
+# csv_dir: "/home/sasm/ros/noetic/system/src/pepper_social_nav_tests/results"
+csv_dir: "/home/adam/ros/noetic/system/src/pepper_social_nav_tests/results"
 approach_name: "smf_planner"
 csv_name: "new_test.csv"
 
 max_test_time: 500
+
+# Jogplotter

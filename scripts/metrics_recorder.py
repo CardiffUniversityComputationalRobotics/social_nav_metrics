@@ -108,6 +108,7 @@ class MetricsRecorder:
                 writer.writeheader()
 
             if last_data is not None:
+                rospy.loginfo(self.total_time_)
                 writer.writerow(
                     {
                         "test_number": int(last_data[1]) + 1,
@@ -118,7 +119,7 @@ class MetricsRecorder:
                         "total_time": self.total_time_,
                         "average_cpu": round(np.average(self.cpu_list_), 2),
                         "collision_counter": self.collision_counter_,
-                        "num_nodes": int(np.average(self.num_nodes_)),
+                        #"num_nodes": int(np.average(self.num_nodes_)),
                     }
                 )
             else:
@@ -132,7 +133,7 @@ class MetricsRecorder:
                         "total_time": self.total_time_,
                         "average_cpu": round(np.average(self.cpu_list_), 2),
                         "collision_counter": self.collision_counter_,
-                        "num_nodes": int(np.average(self.num_nodes_)),
+                        #"num_nodes": int(np.average(self.num_nodes_)),
                     }
                 )
             rospy.loginfo("Metrics for test saved.")
@@ -160,6 +161,11 @@ class MetricsRecorder:
         self.goal_reached_ = 0
         self.current_cpu_ = None
         self.current_num_nodes_ = None
+
+        self.intimate_space_counter = 0 # 0.45m of a person
+        self.personal_space_counter = 0 # 1.2m of a person
+        self.social_space_counter = 0 # 1.2m - 3.6m of a person
+        self.public_space_counter = 0 # >3.6m of a person
 
         # ! SII VARIABLES
 
@@ -196,6 +202,20 @@ class MetricsRecorder:
                         2,
                     )
                 ),
+            )
+        )
+
+        # Distance of robot to agent
+        self.euc_value = lambda x_agent, y_agent, x_robot, y_robot: (
+            math.sqrt(
+                    math.pow(
+                        (x_robot - x_agent),
+                        2,
+                    )
+                    + math.pow(
+                        (y_robot - y_agent),
+                        2,
+                    )
             )
         )
 
@@ -437,6 +457,26 @@ class MetricsRecorder:
 
     # ========================================================
 
+    def personal_space(self):
+        "Checks to see if the robot is within a specific personal-space range"
+        for agent in self.agent_states_:
+            euc_distance = self.euc_value(
+                agent.pose.position.x,
+                agent.pose.position.y,
+                self.robot_position_.pose.position.x,
+                self.robot_position_.pose.position.y,
+            )
+            rospy.logwarn(euc_distance)
+            if euc_distance > 3.6:
+                self.public_space_counter += 1
+            elif euc_distance > 1.2:
+                self.social_space_counter += 1
+            elif euc_distance > 0.45:
+                self.personal_space_counter += 1
+            else:
+                self.intimate_space_counter += 1
+
+
     def run(self):
         """Manages the time passed and recording of the metrics"""
         while not rospy.is_shutdown():
@@ -459,11 +499,24 @@ class MetricsRecorder:
                         self.rmi_ = np.append(self.rmi_, rmi)
                         sii = self.calculate_sii()
                         self.sii_ = np.append(self.sii_, sii)
-
                     self.last_time_ = self.current_time_
                     rospy.sleep(0.00001)
 
+    def test_run(self):
+        while not rospy.is_shutdown():
+            if (
+                self.robot_velocities_
+                and self.robot_position_
+                and self.agent_states_
+                    ):
+                self.personal_space()
+                #rospy.logwarn(self.public_space_counter)
+                #rospy.logwarn(self.social_space_counter)
+                #rospy.logwarn(self.personal_space_counter)
+                #rospy.logwarn(self.intimate_space_counter)
+            rospy.sleep(0.00001)
 
 if __name__ == "__main__":
     csv_counter_saver = MetricsRecorder()
-    csv_counter_saver.run()
+    #csv_counter_saver.run()
+    csv_counter_saver.test_run()
