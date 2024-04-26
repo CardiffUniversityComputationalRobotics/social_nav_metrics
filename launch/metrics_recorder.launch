@@ -7,4 +7,8 @@
     <node pkg="social_nav_metrics" type="collision_counter" name="collision_counter_node" output="screen">
         <rosparam command="load" file="$(find social_nav_metrics)/config/config_example.yaml"/>
     </node>
+
+    <node pkg="social_nav_metrics" type="acceleration_monitor.py" name="acceleration_monitor_node" output="screen">
+        <rosparam command="load" file="$(find social_nav_metrics)/config/config_example.yaml"/>
+    </node>
 </launch>

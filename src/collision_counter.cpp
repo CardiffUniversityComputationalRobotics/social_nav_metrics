@@ -27,6 +27,7 @@
 #include <nav_msgs/Odometry.h>
 #include <pedsim_msgs/AgentStates.h>
 #include <std_msgs/Int32.h>
+#include <std_msgs/Int32MultiArray.h>
 
 #include <stdio.h>
 
@@ -63,8 +64,10 @@ int main(int argc, char **argv)
 
     bool inCollision = false;
     int collisionCounter = 0;
+    int collisionCounterAgent = 0;
+    int collisionCounterEnviroment = 0;
 
-    ros::Publisher collisionCounterPub = nh.advertise<std_msgs::Int32>(collision_counter_topic_, 1, true);
+    ros::Publisher collisionCounterPub = nh.advertise<std_msgs::Int32MultiArray>(collision_counter_topic_, 1000);
 
     bool foundCollision = false;
 
@@ -141,6 +144,11 @@ int main(int argc, char **argv)
             {
                 collisionCounter++;
                 inCollision = true;
+                if (collision_result_octomap.isCollision()) {
+                    collisionCounterEnviroment++;
+                } else {
+                    collisionCounterAgent++;
+                }
             }
         }
         else if (inCollision)
@@ -151,11 +159,16 @@ int main(int argc, char **argv)
             }
         }
 
-        std_msgs::Int32 collisionCounterMsg;
-        collisionCounterMsg.data = collisionCounter;
+        std_msgs::Int32MultiArray msg;
 
-        collisionCounterPub.publish(collisionCounterMsg);
+        msg.data.clear();
+        msg.data.push_back(collisionCounter);
+        msg.data.push_back(collisionCounterAgent);
+        msg.data.push_back(collisionCounterEnviroment);
 
+        // collisionCounterMsg.data = collisionCounter;
+
+        collisionCounterPub.publish(msg);
         loop_rate.sleep();
     }
 

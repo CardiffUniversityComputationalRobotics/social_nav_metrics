@@ -15,9 +15,9 @@ goal_topic: "/goal_available" # UNAVAILABLE
 collision_counter_topic: "/collision_counter" # UNAVAILABLE
 num_nodes_topic: "/smf_move_base_planner/smf_num_nodes" # only considered if the approach is sampling based
 agent_states_topic: "/pedsim_simulator/simulated_agents" # WORKS
-# odom_topic: "/stretch_diff_drive_controller/odom" # WORKS
 
 odom_topic: "/ground_truth"
+acceleration_monitor_topic: "/acceleration_monitor"
 
 # octomap service
 octomap_service: /smf_move_base_mapper/get_binary
@@ -40,3 +40,5 @@ csv_name: "new_test.csv"
 max_test_time: 500
 
 # Jogplotter
+# Runs benchmark of several points
+# ./ros/noetic/system/src/social_nav_benchmark/scripts/smf_nav_stack/tests_maker.sh 

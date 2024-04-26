@@ -6,11 +6,12 @@ import math
 import time
 import tf
 import rospy
-from std_msgs.msg import Float32, Int32, Bool
+from std_msgs.msg import Float32, Int32, Bool, Int32MultiArray, Float32MultiArray
 import numpy as np
 from rosgraph_msgs.msg import Clock
 from pedsim_msgs.msg import AgentStates
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PoseStamped
 
 
 def import_csv(csvfilename):
@@ -24,14 +25,15 @@ def import_csv(csvfilename):
                 row_index += 1
                 columns = [
                     str(row_index),
-                    row[0],
-                    row[1],
-                    row[2],
-                    row[3],
-                    row[4],
-                    row[5],
-                    row[6],
-                    row[7],
+                    row[0], # Test Number
+                    row[1], # Time/Date of Benchmark
+                    row[2], # Goal Reached
+                    row[3], # Average SII
+                    row[4], # Average RMI
+                    row[5], # Time Taken
+                    row[6], # Average CPU
+                    row[7], # Collision Counter
+                    row[8]
                 ]
                 data.append(columns)
         scraped.close()
@@ -88,7 +90,17 @@ class MetricsRecorder:
                 "total_time",
                 "average_cpu",
                 "collision_counter",
+                "collision_agent_counter",
+                "collision_environment_counter",
                 "num_nodes",
+                "path_efficiency",
+                "average_linear_velocity",
+                "average_angular_velocity",
+                "average_linear_acceleration",
+                "average_angular_acceleration",
+                "num_social_spaces",
+                "num_personal_spaces",
+                "num_intimate_spaces"
             ]
             writer = csv.DictWriter(csvfile_write, fieldnames=fieldnames)
             try:
@@ -101,11 +113,26 @@ class MetricsRecorder:
                     "total_time",
                     "average_cpu",
                     "collision_counter",
+                    "collision_agent_counter",
+                    "collision_environment_counter",
                     "num_nodes",
+                    "path_efficiency",
+                    "average_linear_velocity",
+                    "average_angular_velocity",
+                    "average_linear_acceleration",
+                    "average_angular_acceleration",
+                    "num_social_spaces",
+                    "num_personal_spaces",
+                    "num_intimate_spaces"
                 ]:
                     writer.writeheader()
             except:
                 writer.writeheader()
+
+            if self.num_nodes_.size == 0:
+                self.num_nodes_ = "N/A"
+            else:
+                self.num_nodes_ = int(np.average(self.num_nodes_))
 
             if last_data is not None:
                 rospy.loginfo(self.total_time_)
@@ -119,13 +146,23 @@ class MetricsRecorder:
                         "total_time": self.total_time_,
                         "average_cpu": round(np.average(self.cpu_list_), 2),
                         "collision_counter": self.collision_counter_,
-                        #"num_nodes": int(np.average(self.num_nodes_)),
+                        "collision_agent_counter": self.collision_agent_counter_,
+                        "collision_environment_counter": self.collision_environment_counter_,
+                        "num_nodes": self.num_nodes_,
+                        "path_efficiency": round(self.path_efficiency_, 2),
+                        "average_linear_velocity": round(np.average(self.velocity_linear_list_), 2),
+                        "average_angular_velocity": round(np.average(self.velocity_angular_list_), 2),
+                        "average_linear_acceleration": round(np.average(self.acceleration_linear), 2),
+                        "average_angular_acceleration": round(np.average(self.acceleration_angular), 2),
+                        "num_social_spaces": self.social_space_counter,
+                        "num_personal_spaces": self.personal_space_counter,
+                        "num_intimate_spaces": self.intimate_space_counter
                     }
                 )
             else:
                 writer.writerow(
                     {
-                        "test_number": 1,
+                        "test_number": int(last_data[1]) + 1,
                         "time": dt_string,
                         "goal_reached": self.goal_reached_,
                         "average_sii": round(np.average(self.sii_), 2),
@@ -133,7 +170,17 @@ class MetricsRecorder:
                         "total_time": self.total_time_,
                         "average_cpu": round(np.average(self.cpu_list_), 2),
                         "collision_counter": self.collision_counter_,
-                        #"num_nodes": int(np.average(self.num_nodes_)),
+                        "collision_agent_counter": self.collision_agent_counter_,
+                        "collision_environment_counter": self.collision_environment_counter_,
+                        "num_nodes": self.num_nodes_,
+                        "path_efficiency": round(self.path_efficiency_, 2),
+                        "average_linear_velocity": round(np.average(self.velocity_linear_list_), 2),
+                        "average_angular_velocity": round(np.average(self.velocity_angular_list_), 2),
+                        "average_linear_acceleration": round(np.average(self.acceleration_linear), 2),
+                        "average_angular_acceleration": round(np.average(self.acceleration_angular), 2),
+                        "num_social_spaces": self.social_space_counter,
+                        "num_personal_spaces": self.personal_space_counter,
+                        "num_intimate_spaces": self.intimate_space_counter
                     }
                 )
             rospy.loginfo("Metrics for test saved.")
@@ -149,6 +196,9 @@ class MetricsRecorder:
         # POSITIONS
         self.robot_position_ = None
         self.agent_states_ = None
+        self.waypoint_distance = 0
+        self.total_distance_ = 0
+        self.path_efficiency_ = 0
 
         # ROBOT VELOCITIES
         self.robot_velocities_ = None
@@ -158,14 +208,19 @@ class MetricsRecorder:
         self.sii_ = np.array([], dtype=np.float64)
         self.num_nodes_ = np.array([], dtype=np.int32)
         self.collision_counter_ = 0
+        self.collision_agent_counter_ = 0
+        self.collision_environment_counter_ = 0
         self.goal_reached_ = 0
         self.current_cpu_ = None
         self.current_num_nodes_ = None
+        self.goal_position_ = None
+
+        self.acceleration_linear = np.array([], dtype=np.float32)
+        self.acceleration_angular = np.array([], dtype=np.float32)
 
         self.intimate_space_counter = 0 # 0.45m of a person
         self.personal_space_counter = 0 # 1.2m of a person
-        self.social_space_counter = 0 # 1.2m - 3.6m of a person
-        self.public_space_counter = 0 # >3.6m of a person
+        self.social_space_counter = 0 # 1.2m of a person)
 
         # ! SII VARIABLES
 
@@ -227,8 +282,11 @@ class MetricsRecorder:
         self.init_query_time_ = 0.0
         self.current_time_ = 0.0
         self.last_time_ = 0
+        self.current_nano_time = 0.0
 
         self.cpu_list_ = np.array([], dtype=np.float64)
+        self.velocity_linear_list_ = np.array([], dtype=np.float64)
+        self.velocity_angular_list_ = np.array([], dtype=np.float64)
         # ================================================
 
         # ! CONFIGS VALUES
@@ -251,6 +309,12 @@ class MetricsRecorder:
         self.collision_counter_topic_ = rospy.get_param(
             "~collision_counter_topic", "/collision_counter"
         )
+        self.goal_position_topic_ = rospy.get_param(
+            "~goal_position_topic", "/smf_move_base_planner/query_goal_pose_rviz"
+        )
+        self.acceleration_monitor_topic_ = rospy.get_param(
+            "~acceleration_monitor_topic", "/acceleration_monitor"
+        )
 
         # ? RATE PARAM
         self.measure_rate_ = rospy.get_param("~measure_rate", 5)
@@ -261,6 +325,9 @@ class MetricsRecorder:
         self.csv_dir_ = rospy.get_param("~csv_dir")
         self.approach_name_ = rospy.get_param("~approach_name")
         self.csv_name_ = rospy.get_param("~csv_name")
+
+        self.robot_radius = rospy.get_param("~robot_radius", 0.3)
+        self.agent_radius = rospy.get_param("~agent_radius", 0.45)
         # ================================================
 
         #! SUBSCRIBERS
@@ -298,8 +365,12 @@ class MetricsRecorder:
         )
         rospy.Subscriber(self.odom_topic_, Odometry, self.odom_callback)
         rospy.Subscriber(
-            self.collision_counter_topic_, Int32, self.collision_counter_callback
+            self.collision_counter_topic_, Int32MultiArray, self.collision_counter_callback
         )
+        rospy.Subscriber(
+            self.acceleration_monitor_topic_, Float32MultiArray, self.acceleration_monitor_callback
+        )
+        rospy.Subscriber(self.goal_position_topic_, PoseStamped, self.goal_position_callback)
         # ======================================================
 
     # ! CALLBACKS
@@ -325,15 +396,18 @@ class MetricsRecorder:
     def clock_callback(self, msg: Clock):
         """Listens to the gazebo clock time if simulation is running."""
         self.current_time_ = msg.clock.secs
+        self.current_nano_time = msg.clock.nsecs
 
     def cpu_callback(self, msg):
         """Listens to the CPU power used by the navigation system"""
         if self.goal_available_:
             self.current_cpu_ = msg.data
 
-    def collision_counter_callback(self, msg):
+    def collision_counter_callback(self, array: Int32MultiArray):
         """Listens to the amount of collisions happening by an external node."""
-        self.collision_counter_ = msg.data
+        self.collision_counter_ = array.data[0]
+        self.collision_agent_counter_ = array.data[1]
+        self.collision_environment_counter_ = array.data[2]
 
     def num_nodes_callback(self, msg):
         """Listens to the number of nodes sampled for the case of sampling based techniques"""
@@ -341,12 +415,40 @@ class MetricsRecorder:
 
     def odom_callback(self, odom: Odometry):
         """Listens to the odometry of the robot."""
+        new_position = odom.pose.pose.position
+        new_linear_velocity = odom.twist.twist.linear
+        new_angular_velocity = odom.twist.twist.angular
+
+        if self.robot_position_ is not None:
+            euc = self.euc_value(
+                    new_position.x,
+                    new_position.y,
+                    self.robot_position_.pose.position.x,
+                    self.robot_position_.pose.position.y
+                )
+            self.total_distance_ += euc
+
+        if self.robot_velocities_ is not None:
+            lin_val = math.sqrt(math.pow(new_linear_velocity.x, 2) + math.pow(new_linear_velocity.y, 2) + math.pow(new_linear_velocity.z, 2))
+            ang_val = math.sqrt(math.pow(new_angular_velocity.x, 2) + math.pow(new_angular_velocity.y, 2) + math.pow(new_angular_velocity.z, 2))
+            self.velocity_linear_list_ = np.append(self.velocity_linear_list_, lin_val)
+            self.velocity_angular_list_ = np.append(self.velocity_angular_list_, ang_val)
+
         self.robot_position_ = odom.pose
         self.robot_velocities_ = odom.twist
 
     def agents_callback(self, agents: AgentStates):
         """Listens to the states of social agents"""
         self.agent_states_ = agents.agent_states
+
+    def goal_position_callback(self, pose: PoseStamped):
+        """Listens to the goal position"""
+        self.goal_position_ = pose
+
+    def acceleration_monitor_callback(self, array: Float32MultiArray):
+        """Listens to the acceleration of the robot"""
+        self.acceleration_linear = np.append(self.acceleration_linear, array.data[0])
+        self.acceleration_angular = np.append(self.acceleration_angular, array.data[1])
 
     # =================================================
 
@@ -457,25 +559,131 @@ class MetricsRecorder:
 
     # ========================================================
 
+    def calculate_sei(self):
+        
+        for agent in self.agent_states_:
+
+            v_r_max = 0.22
+            v_p_max = 0.22
+            v_p_r = 0
+            v_r_p = 0
+            d = 0
+            d_min = self.robot_radius + self.agent_radius
+
+            d = self.euc_value(
+                agent.pose.position.x,
+                agent.pose.position.y,
+                self.robot_position_.pose.position.x,
+                self.robot_position_.pose.position.y,
+            )
+
+            v_r = np.sqrt(
+                    math.pow(self.robot_velocities_.twist.linear.x, 2)
+                    + math.pow(self.robot_velocities_.twist.linear.y, 2)
+                )
+            
+            v_p = np.sqrt(
+                    math.pow(agent.twist.linear.x, 2) + math.pow(agent.twist.linear.y, 2)
+                )
+
+            beta = math.atan2(
+                agent.pose.position.y - self.robot_position_.pose.position.y,
+                agent.pose.position.x - self.robot_position_.pose.position.x,
+            )
+
+            if beta < 0:
+                beta = 2 * math.pi + beta
+
+            quaternion = (
+                self.robot_position_.pose.orientation.x,
+                self.robot_position_.pose.orientation.y,
+                self.robot_position_.pose.orientation.z,
+                self.robot_position_.pose.orientation.w,
+            )
+
+            euler = tf.transformations.euler_from_quaternion(quaternion)
+            yaw = euler[2]
+
+            if yaw < 0:
+                yaw = 2 * math.pi + yaw
+
+            if beta > (yaw + math.pi):
+                beta = abs(yaw + 2 * math.pi - beta)
+            elif yaw > (beta + math.pi):
+                beta = abs(beta + 2 * math.pi - yaw)
+            else:
+                beta = abs(beta - yaw)
+
+            alpha = math.atan2(
+                self.robot_position_.pose.position.y - agent.pose.position.y,
+                self.robot_position_.pose.position.x - agent.pose.position.x,
+            )
+
+            if alpha < 0:
+                alpha = 2 * math.pi + alpha
+
+            quaternion = (
+                agent.pose.orientation.x,
+                agent.pose.orientation.y,
+                agent.pose.orientation.z,
+                agent.pose.orientation.w,
+            )
+            euler = tf.transformations.euler_from_quaternion(quaternion)
+            yaw = euler[2]
+
+            if yaw < 0:
+                yaw = 2 * math.pi + yaw
+
+            if alpha > (yaw + math.pi):
+                alpha = abs(yaw + 2 * math.pi - alpha)
+            elif yaw > (alpha + math.pi):
+                alpha = abs(alpha + 2 * math.pi - yaw)
+            else:
+                alpha = abs(alpha - yaw)
+
+            v_p_r = v_r * np.cos(beta)
+            v_r_p = v_p * np.cos(alpha)
+
+            p1 = (2 / (1 + math.exp( -(((v_p_r - v_r_max) * (v_r_p * v_p_max) / math.pow(v_p_r + v_r_p, 2))))))
+            p2 = (1 / (1 + math.exp( -((10 / v_p_max) * (v_p_r - v_r_max / 4)))))
+            p3 = (1 / (d + d_min))
+
+            sei = p1 * p2 * p3
+
+        return sei
+
     def personal_space(self):
         "Checks to see if the robot is within a specific personal-space range"
-        for agent in self.agent_states_:
+        self.initialize_ps_list()
+        for count, agent in enumerate(self.agent_states_, 1):
             euc_distance = self.euc_value(
                 agent.pose.position.x,
                 agent.pose.position.y,
                 self.robot_position_.pose.position.x,
                 self.robot_position_.pose.position.y,
             )
-            rospy.logwarn(euc_distance)
-            if euc_distance > 3.6:
-                self.public_space_counter += 1
-            elif euc_distance > 1.2:
-                self.social_space_counter += 1
-            elif euc_distance > 0.45:
-                self.personal_space_counter += 1
-            else:
-                self.intimate_space_counter += 1
+            if euc_distance > 1.2 and euc_distance < 3.6:
+                self.personal_space_list[(count*3)-3] = 1
+            elif euc_distance > 0.45 and euc_distance < 1.2:
+                self.personal_space_list[(count*3)-2] = 1
+            elif euc_distance < 0.45:
+                self.personal_space_list[(count*3)-1] = 1
 
+    def initialize_ps_list(self):
+        self.personal_space_list = []
+        for agent in self.agent_states_:
+            for i in range(3):
+                self.personal_space_list.append(0)
+
+
+    def path_efficiency(self, distance_direct, distance_actual):
+        """Calculates the ratio of the distance between 2 way points 
+        and the actual distance of the path used by the robot.
+        Higher value is better"""
+
+        path_efficiency = distance_direct/distance_actual
+
+        return path_efficiency
 
     def run(self):
         """Manages the time passed and recording of the metrics"""
@@ -503,18 +711,39 @@ class MetricsRecorder:
                     rospy.sleep(0.00001)
 
     def test_run(self):
+        first_iteration = False
         while not rospy.is_shutdown():
-            if (
-                self.robot_velocities_
-                and self.robot_position_
-                and self.agent_states_
-                    ):
-                self.personal_space()
-                #rospy.logwarn(self.public_space_counter)
-                #rospy.logwarn(self.social_space_counter)
-                #rospy.logwarn(self.personal_space_counter)
-                #rospy.logwarn(self.intimate_space_counter)
-            rospy.sleep(0.00001)
+            if (first_iteration == False) and (self.goal_position_ != None):
+                first_iteration = True
+                self.waypoint_distance = self.euc_value(
+                    self.goal_position_.pose.position.x,
+                    self.goal_position_.pose.position.y,
+                    self.robot_position_.pose.position.x,
+                    self.robot_position_.pose.position.y,
+                )
+                self.initialize_ps_list()
+            if self.goal_available_ == True:
+                if (
+                    self.robot_velocities_
+                    and self.robot_position_
+                    and self.agent_states_
+                ):  
+                    if first_iteration == True:
+                        self.personal_space_list_check = self.personal_space_list.copy()
+                        self.personal_space()
+                        if self.personal_space_list_check != self.personal_space_list:
+                            for i in range(len(self.personal_space_list)):
+                                if self.personal_space_list[i] > self.personal_space_list_check[i]:
+                                    if (i % 3) == 0:
+                                        self.social_space_counter += 1
+                                    elif (i % 3) == 1:
+                                        self.personal_space_counter += 1
+                                    else:
+                                        self.intimate_space_counter += 1
+                    rospy.sleep(0.00001)
+            if self.goal_reached_:
+                self.path_efficiency_ = self.path_efficiency(self.waypoint_distance, self.total_distance_)
+            
 
 if __name__ == "__main__":
     csv_counter_saver = MetricsRecorder()
