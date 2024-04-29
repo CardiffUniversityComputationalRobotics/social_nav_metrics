@@ -48,12 +48,13 @@ class Acceleration:
         dt = current_time - self.last_time
         if dt > 0 and self.last_linear_velocity != 0 and self.last_angular_velocity != 0:
             self.msg = Float32MultiArray()
-            linear_acceleration = (self.current_linear_velocity - self.last_linear_velocity)
-            angular_acceleration = (self.current_angular_velocity - self.last_angular_velocity)
+            linear_acceleration = abs(self.current_linear_velocity - self.last_linear_velocity) / dt
+            angular_acceleration = abs(self.current_angular_velocity - self.last_angular_velocity) / dt
 
             self.msg.data = [linear_acceleration, angular_acceleration]
             self.pub.publish(self.msg)
 
+        self.last_time = current_time
 
     def run(self):
         while not rospy.is_shutdown():

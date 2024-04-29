@@ -26,6 +26,8 @@ octomap_service: /smf_move_base_mapper/get_binary
 robot_radius: 0.3
 robot_height: 1.0
 agent_radius: 0.45
+robot_max_velocity: 0.22
+agent_max_velocity: 0.5
 
 # ! measuring characteristics
 measure_rate: 0.5
@@ -35,7 +37,7 @@ sim: True # whether the test is being done in simulation or real experiment
 # csv_dir: "/home/sasm/ros/noetic/system/src/pepper_social_nav_tests/results"
 csv_dir: "/home/adam/ros/noetic/system/src/pepper_social_nav_tests/results"
 approach_name: "smf_planner"
-csv_name: "new_test.csv"
+csv_name: "test.csv"
 
 max_test_time: 500
 

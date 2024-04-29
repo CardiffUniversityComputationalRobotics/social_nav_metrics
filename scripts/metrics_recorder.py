@@ -100,7 +100,8 @@ class MetricsRecorder:
                 "average_angular_acceleration",
                 "num_social_spaces",
                 "num_personal_spaces",
-                "num_intimate_spaces"
+                "num_intimate_spaces",
+                "average_sei"
             ]
             writer = csv.DictWriter(csvfile_write, fieldnames=fieldnames)
             try:
@@ -123,7 +124,8 @@ class MetricsRecorder:
                     "average_angular_acceleration",
                     "num_social_spaces",
                     "num_personal_spaces",
-                    "num_intimate_spaces"
+                    "num_intimate_spaces",
+                    "average_sei"
                 ]:
                     writer.writeheader()
             except:
@@ -134,11 +136,14 @@ class MetricsRecorder:
             else:
                 self.num_nodes_ = int(np.average(self.num_nodes_))
 
+            self.path_efficiency_ = self.path_efficiency(self.waypoint_distance, self.total_distance_)
+
             if last_data is not None:
-                rospy.loginfo(self.total_time_)
+                rospy.loginfo(last_data)
+                rospy.loginfo(last_data[1])
                 writer.writerow(
                     {
-                        "test_number": int(last_data[1]) + 1,
+                        "test_number": 1,
                         "time": dt_string,
                         "goal_reached": self.goal_reached_,
                         "average_sii": round(np.average(self.sii_), 2),
@@ -156,7 +161,8 @@ class MetricsRecorder:
                         "average_angular_acceleration": round(np.average(self.acceleration_angular), 2),
                         "num_social_spaces": self.social_space_counter,
                         "num_personal_spaces": self.personal_space_counter,
-                        "num_intimate_spaces": self.intimate_space_counter
+                        "num_intimate_spaces": self.intimate_space_counter,
+                        "average_sei": round(np.average(self.sei_), 2)
                     }
                 )
             else:
@@ -180,7 +186,8 @@ class MetricsRecorder:
                         "average_angular_acceleration": round(np.average(self.acceleration_angular), 2),
                         "num_social_spaces": self.social_space_counter,
                         "num_personal_spaces": self.personal_space_counter,
-                        "num_intimate_spaces": self.intimate_space_counter
+                        "num_intimate_spaces": self.intimate_space_counter,
+                        "average_sei": round(np.average(self.sei_), 2)
                     }
                 )
             rospy.loginfo("Metrics for test saved.")
@@ -222,6 +229,7 @@ class MetricsRecorder:
         self.personal_space_counter = 0 # 1.2m of a person
         self.social_space_counter = 0 # 1.2m of a person)
 
+        self.sei_ = np.array([], dtype=np.float64)
         # ! SII VARIABLES
 
         """d_c: is the desirable value of the distance between the robot and the 
@@ -328,6 +336,9 @@ class MetricsRecorder:
 
         self.robot_radius = rospy.get_param("~robot_radius", 0.3)
         self.agent_radius = rospy.get_param("~agent_radius", 0.45)
+
+        self.robot_max_velocity = rospy.get_param("~robot_max_velocity", 0.22)
+        self.agent_max_velocity = rospy.get_param("~agent_max_velocity", 0.5)
         # ================================================
 
         #! SUBSCRIBERS
@@ -415,17 +426,19 @@ class MetricsRecorder:
 
     def odom_callback(self, odom: Odometry):
         """Listens to the odometry of the robot."""
-        new_position = odom.pose.pose.position
+        current_position = odom.pose.pose.position
         new_linear_velocity = odom.twist.twist.linear
         new_angular_velocity = odom.twist.twist.angular
 
         if self.robot_position_ is not None:
             euc = self.euc_value(
-                    new_position.x,
-                    new_position.y,
+                    current_position.x,
+                    current_position.y,
                     self.robot_position_.pose.position.x,
                     self.robot_position_.pose.position.y
                 )
+            rospy.logwarn(self.waypoint_distance)
+            rospy.logwarn(self.total_distance_)
             self.total_distance_ += euc
 
         if self.robot_velocities_ is not None:
@@ -560,11 +573,15 @@ class MetricsRecorder:
     # ========================================================
 
     def calculate_sei(self):
-        
+        """Calculates the social effort index according to the robot
+        and surrounding social agents"""
+
+        last_sei = 0
+
         for agent in self.agent_states_:
 
-            v_r_max = 0.22
-            v_p_max = 0.22
+            v_r_max = self.robot_max_velocity
+            v_p_max = self.agent_max_velocity
             v_p_r = 0
             v_r_p = 0
             d = 0
@@ -644,13 +661,21 @@ class MetricsRecorder:
             v_p_r = v_r * np.cos(beta)
             v_r_p = v_p * np.cos(alpha)
 
-            p1 = (2 / (1 + math.exp( -(((v_p_r - v_r_max) * (v_r_p * v_p_max) / math.pow(v_p_r + v_r_p, 2))))))
+            rospy.logwarn(v_p_r)
+            rospy.logwarn(v_r_max)
+            rospy.logwarn(v_r_p)
+            rospy.logwarn(v_p_max)
+
+            p1 = (2 / (1 + math.exp( -(( ((v_p_r - v_r_max) * (v_r_p + v_p_max)) / math.pow(v_p_r + v_r_p, 2))))))
             p2 = (1 / (1 + math.exp( -((10 / v_p_max) * (v_p_r - v_r_max / 4)))))
             p3 = (1 / (d + d_min))
 
-            sei = p1 * p2 * p3
+            current_sei = p1 * p2 * p3
 
-        return sei
+            if current_sei > last_sei:
+                last_sei = current_sei
+
+        return last_sei
 
     def personal_space(self):
         "Checks to see if the robot is within a specific personal-space range"
@@ -670,11 +695,25 @@ class MetricsRecorder:
                 self.personal_space_list[(count*3)-1] = 1
 
     def initialize_ps_list(self):
+        """Initialises a list to hold values of personal space ranges
+        for each agent"""
         self.personal_space_list = []
         for agent in self.agent_states_:
             for i in range(3):
                 self.personal_space_list.append(0)
 
+    def personal_space_check(self):
+        """Checks the list to see if there has been any changes to the
+        robot being in a specified space range"""
+        if self.personal_space_list_check != self.personal_space_list:
+            for i in range(len(self.personal_space_list)):
+                if self.personal_space_list[i] > self.personal_space_list_check[i]:
+                    if (i % 3) == 0:
+                        self.social_space_counter += 1
+                    elif (i % 3) == 1:
+                        self.personal_space_counter += 1
+                    else:
+                        self.intimate_space_counter += 1
 
     def path_efficiency(self, distance_direct, distance_actual):
         """Calculates the ratio of the distance between 2 way points 
@@ -687,8 +726,20 @@ class MetricsRecorder:
 
     def run(self):
         """Manages the time passed and recording of the metrics"""
+
+        first_iteration = False
+
         while not rospy.is_shutdown():
             if self.goal_available_:
+                if (first_iteration == False) and (self.goal_position_ != None):
+                    first_iteration = True
+                    self.waypoint_distance = self.euc_value(
+                        self.goal_position_.pose.position.x,
+                        self.goal_position_.pose.position.y,
+                        self.robot_position_.pose.position.x,
+                        self.robot_position_.pose.position.y,
+                    )
+                    self.initialize_ps_list()
                 if not self.sim:
                     self.current_time_ = time.time()
                 if self.current_time_ - self.last_time_ >= self.measure_period_:
@@ -707,45 +758,46 @@ class MetricsRecorder:
                         self.rmi_ = np.append(self.rmi_, rmi)
                         sii = self.calculate_sii()
                         self.sii_ = np.append(self.sii_, sii)
+                        if first_iteration == True:
+                            self.personal_space_list_check = self.personal_space_list.copy()
+                            self.personal_space()
+                            self.personal_space_check()
+                            #sei = self.calculate_sei()
+                            #self.sei_ = np.append(self.sei_, sei)
                     self.last_time_ = self.current_time_
                     rospy.sleep(0.00001)
 
-    def test_run(self):
-        first_iteration = False
-        while not rospy.is_shutdown():
-            if (first_iteration == False) and (self.goal_position_ != None):
-                first_iteration = True
-                self.waypoint_distance = self.euc_value(
-                    self.goal_position_.pose.position.x,
-                    self.goal_position_.pose.position.y,
-                    self.robot_position_.pose.position.x,
-                    self.robot_position_.pose.position.y,
-                )
-                self.initialize_ps_list()
-            if self.goal_available_ == True:
-                if (
-                    self.robot_velocities_
-                    and self.robot_position_
-                    and self.agent_states_
-                ):  
-                    if first_iteration == True:
-                        self.personal_space_list_check = self.personal_space_list.copy()
-                        self.personal_space()
-                        if self.personal_space_list_check != self.personal_space_list:
-                            for i in range(len(self.personal_space_list)):
-                                if self.personal_space_list[i] > self.personal_space_list_check[i]:
-                                    if (i % 3) == 0:
-                                        self.social_space_counter += 1
-                                    elif (i % 3) == 1:
-                                        self.personal_space_counter += 1
-                                    else:
-                                        self.intimate_space_counter += 1
-                    rospy.sleep(0.00001)
-            if self.goal_reached_:
-                self.path_efficiency_ = self.path_efficiency(self.waypoint_distance, self.total_distance_)
+    # def test_run(self):
+    #     first_iteration = False
+    #     while not rospy.is_shutdown():
+    #         if (first_iteration == False) and (self.goal_position_ != None):
+    #             first_iteration = True
+    #             self.waypoint_distance = self.euc_value(
+    #                 self.goal_position_.pose.position.x,
+    #                 self.goal_position_.pose.position.y,
+    #                 self.robot_position_.pose.position.x,
+    #                 self.robot_position_.pose.position.y,
+    #             )
+    #             self.initialize_ps_list()
+    #         if self.goal_available_ == True:
+    #             if (
+    #                 self.robot_velocities_
+    #                 and self.robot_position_
+    #                 and self.agent_states_
+    #             ):  
+    #                 if first_iteration == True:
+    #                     self.personal_space_list_check = self.personal_space_list.copy()
+    #                     self.personal_space()
+    #                     self.personal_space_check()
+    #                     sei = self.calculate_sei()
+    #                     rospy.logwarn(sei)
+    #                     self.sei_ = np.append(self.sei_, sei)
+    #                 rospy.sleep(0.00001)
+    #         if self.goal_reached_:
+    #             self.path_efficiency_ = self.path_efficiency(self.waypoint_distance, self.total_distance_)
             
 
 if __name__ == "__main__":
     csv_counter_saver = MetricsRecorder()
-    #csv_counter_saver.run()
-    csv_counter_saver.test_run()
+    csv_counter_saver.run()
+    #csv_counter_saver.test_run()
