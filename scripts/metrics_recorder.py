@@ -12,7 +12,7 @@ from rosgraph_msgs.msg import Clock
 from pedsim_msgs.msg import AgentStates
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
-
+from move_base_msgs.msg import MoveBaseActionGoal
 
 def import_csv(csvfilename):
     """Opens and return all content from a CSV in an array"""
@@ -33,7 +33,18 @@ def import_csv(csvfilename):
                     row[5], # Time Taken
                     row[6], # Average CPU
                     row[7], # Collision Counter
-                    row[8]
+                    row[8], # Collision Counter Agent
+                    row[9], # Collision Counter Environment
+                    row[10], # Num Nodes
+                    row[11], # Path Efficiency
+                    row[12], # Average Linear Velocity
+                    row[13], # Average Angular Velocity
+                    row[14], # Average Linear Acceleration
+                    row[15], # Average Angular Acceleration
+                    row[16], # Num Social Spaces
+                    row[17], # Num Personal Spaces
+                    row[18], # Num Intimate Spaces
+                    row[19] # Average SEI
                 ]
                 data.append(columns)
         scraped.close()
@@ -136,11 +147,21 @@ class MetricsRecorder:
             else:
                 self.num_nodes_ = int(np.average(self.num_nodes_))
 
+            start_point = self.points_list[0]
+
+            for point in self.points_list:
+                if point != start_point:
+                    self.total_distance_ += self.euc_value(
+                        point[0],
+                        point[1],
+                        last_point[0],
+                        last_point[1]
+                    )
+                last_point = point
+
             self.path_efficiency_ = self.path_efficiency(self.waypoint_distance, self.total_distance_)
 
             if last_data is not None:
-                rospy.loginfo(last_data)
-                rospy.loginfo(last_data[1])
                 writer.writerow(
                     {
                         "test_number": 1,
@@ -225,6 +246,8 @@ class MetricsRecorder:
         self.acceleration_linear = np.array([], dtype=np.float32)
         self.acceleration_angular = np.array([], dtype=np.float32)
 
+        self.points_list = []
+
         self.intimate_space_counter = 0 # 0.45m of a person
         self.personal_space_counter = 0 # 1.2m of a person
         self.social_space_counter = 0 # 1.2m of a person)
@@ -269,14 +292,14 @@ class MetricsRecorder:
         )
 
         # Distance of robot to agent
-        self.euc_value = lambda x_agent, y_agent, x_robot, y_robot: (
+        self.euc_value = lambda x_1, y_1, x_2, y_2: (
             math.sqrt(
                     math.pow(
-                        (x_robot - x_agent),
+                        (x_2 - x_1),
                         2,
                     )
                     + math.pow(
-                        (y_robot - y_agent),
+                        (y_2 - y_1),
                         2,
                     )
             )
@@ -381,7 +404,11 @@ class MetricsRecorder:
         rospy.Subscriber(
             self.acceleration_monitor_topic_, Float32MultiArray, self.acceleration_monitor_callback
         )
-        rospy.Subscriber(self.goal_position_topic_, PoseStamped, self.goal_position_callback)
+        rospy.logwarn(self.goal_position_topic_)
+        if self.goal_position_topic_ == "/move_base/goal":
+            rospy.Subscriber(self.goal_position_topic_, MoveBaseActionGoal, self.goal_position_callback)
+        else:
+            rospy.Subscriber(self.goal_position_topic_, PoseStamped, self.goal_position_callback)
         # ======================================================
 
     # ! CALLBACKS
@@ -431,15 +458,14 @@ class MetricsRecorder:
         new_angular_velocity = odom.twist.twist.angular
 
         if self.robot_position_ is not None:
-            euc = self.euc_value(
-                    current_position.x,
-                    current_position.y,
-                    self.robot_position_.pose.position.x,
-                    self.robot_position_.pose.position.y
-                )
-            rospy.logwarn(self.waypoint_distance)
-            rospy.logwarn(self.total_distance_)
-            self.total_distance_ += euc
+            # euc = self.euc_value(
+            #         current_position.x,
+            #         current_position.y,
+            #         self.robot_position_.pose.position.x,
+            #         self.robot_position_.pose.position.y
+            #     )
+            # self.total_distance_ += euc
+            self.points_list.append([current_position.x, current_position.y])
 
         if self.robot_velocities_ is not None:
             lin_val = math.sqrt(math.pow(new_linear_velocity.x, 2) + math.pow(new_linear_velocity.y, 2) + math.pow(new_linear_velocity.z, 2))
@@ -456,7 +482,10 @@ class MetricsRecorder:
 
     def goal_position_callback(self, pose: PoseStamped):
         """Listens to the goal position"""
-        self.goal_position_ = pose
+        if self.goal_position_topic_ == "/move_base/goal":
+            self.goal_position_ = pose.goal.target_pose
+        else:
+            self.goal_position_ = pose
 
     def acceleration_monitor_callback(self, array: Float32MultiArray):
         """Listens to the acceleration of the robot"""
@@ -661,12 +690,14 @@ class MetricsRecorder:
             v_p_r = v_r * np.cos(beta)
             v_r_p = v_p * np.cos(alpha)
 
-            rospy.logwarn(v_p_r)
-            rospy.logwarn(v_r_max)
-            rospy.logwarn(v_r_p)
-            rospy.logwarn(v_p_max)
+            p1_1 = -( ((v_p_r - v_r_max) * (v_r_p + v_p_max)) / math.pow(v_p_r + v_r_p, 2) )
 
-            p1 = (2 / (1 + math.exp( -(( ((v_p_r - v_r_max) * (v_r_p + v_p_max)) / math.pow(v_p_r + v_r_p, 2))))))
+            if p1_1 >= -208 and p1_1 <= 370:
+                p1_1 = math.exp(-( ((v_p_r - v_r_max) * (v_r_p + v_p_max)) / math.pow(v_p_r + v_r_p, 2)))
+            else:
+                p1_1 = 0
+
+            p1 = (2 / (1 + p1_1))
             p2 = (1 / (1 + math.exp( -((10 / v_p_max) * (v_p_r - v_r_max / 4)))))
             p3 = (1 / (d + d_min))
 
@@ -762,8 +793,8 @@ class MetricsRecorder:
                             self.personal_space_list_check = self.personal_space_list.copy()
                             self.personal_space()
                             self.personal_space_check()
-                            #sei = self.calculate_sei()
-                            #self.sei_ = np.append(self.sei_, sei)
+                            sei = self.calculate_sei()
+                            self.sei_ = np.append(self.sei_, sei)
                     self.last_time_ = self.current_time_
                     rospy.sleep(0.00001)
 
