@@ -13,6 +13,7 @@ from pedsim_msgs.msg import AgentStates
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 from move_base_msgs.msg import MoveBaseActionGoal
+from sfm_diff_drive.msg import SFMDriveActionGoal
 
 def import_csv(csvfilename):
     """Opens and return all content from a CSV in an array"""
@@ -404,9 +405,10 @@ class MetricsRecorder:
         rospy.Subscriber(
             self.acceleration_monitor_topic_, Float32MultiArray, self.acceleration_monitor_callback
         )
-        rospy.logwarn(self.goal_position_topic_)
         if self.goal_position_topic_ == "/move_base/goal":
             rospy.Subscriber(self.goal_position_topic_, MoveBaseActionGoal, self.goal_position_callback)
+        elif self.goal_position_topic_ == "/sfm_drive_node/goal":
+            rospy.Subscriber(self.goal_position_topic_, SFMDriveActionGoal, self.goal_position_callback)
         else:
             rospy.Subscriber(self.goal_position_topic_, PoseStamped, self.goal_position_callback)
         # ======================================================
@@ -458,13 +460,6 @@ class MetricsRecorder:
         new_angular_velocity = odom.twist.twist.angular
 
         if self.robot_position_ is not None:
-            # euc = self.euc_value(
-            #         current_position.x,
-            #         current_position.y,
-            #         self.robot_position_.pose.position.x,
-            #         self.robot_position_.pose.position.y
-            #     )
-            # self.total_distance_ += euc
             self.points_list.append([current_position.x, current_position.y])
 
         if self.robot_velocities_ is not None:
@@ -483,9 +478,11 @@ class MetricsRecorder:
     def goal_position_callback(self, pose: PoseStamped):
         """Listens to the goal position"""
         if self.goal_position_topic_ == "/move_base/goal":
-            self.goal_position_ = pose.goal.target_pose
+            self.goal_position_ = pose.goal.target_pose.pose.position
+        elif self.goal_position_topic_ == "/sfm_drive_node/goal":
+            self.goal_position_ = pose.goal.goal
         else:
-            self.goal_position_ = pose
+            self.goal_position_ = pose.pose.position
 
     def acceleration_monitor_callback(self, array: Float32MultiArray):
         """Listens to the acceleration of the robot"""
@@ -765,8 +762,8 @@ class MetricsRecorder:
                 if (first_iteration == False) and (self.goal_position_ != None):
                     first_iteration = True
                     self.waypoint_distance = self.euc_value(
-                        self.goal_position_.pose.position.x,
-                        self.goal_position_.pose.position.y,
+                        self.goal_position_.x,
+                        self.goal_position_.y,
                         self.robot_position_.pose.position.x,
                         self.robot_position_.pose.position.y,
                     )
@@ -797,38 +794,8 @@ class MetricsRecorder:
                             self.sei_ = np.append(self.sei_, sei)
                     self.last_time_ = self.current_time_
                     rospy.sleep(0.00001)
-
-    # def test_run(self):
-    #     first_iteration = False
-    #     while not rospy.is_shutdown():
-    #         if (first_iteration == False) and (self.goal_position_ != None):
-    #             first_iteration = True
-    #             self.waypoint_distance = self.euc_value(
-    #                 self.goal_position_.pose.position.x,
-    #                 self.goal_position_.pose.position.y,
-    #                 self.robot_position_.pose.position.x,
-    #                 self.robot_position_.pose.position.y,
-    #             )
-    #             self.initialize_ps_list()
-    #         if self.goal_available_ == True:
-    #             if (
-    #                 self.robot_velocities_
-    #                 and self.robot_position_
-    #                 and self.agent_states_
-    #             ):  
-    #                 if first_iteration == True:
-    #                     self.personal_space_list_check = self.personal_space_list.copy()
-    #                     self.personal_space()
-    #                     self.personal_space_check()
-    #                     sei = self.calculate_sei()
-    #                     rospy.logwarn(sei)
-    #                     self.sei_ = np.append(self.sei_, sei)
-    #                 rospy.sleep(0.00001)
-    #         if self.goal_reached_:
-    #             self.path_efficiency_ = self.path_efficiency(self.waypoint_distance, self.total_distance_)
             
 
 if __name__ == "__main__":
     csv_counter_saver = MetricsRecorder()
     csv_counter_saver.run()
-    #csv_counter_saver.test_run()
