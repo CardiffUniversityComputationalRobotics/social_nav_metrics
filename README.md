@@ -1,4 +1,4 @@
-# Social Robot Navigation metrics recorder exteneded
+# Social Robot Navigation metrics recorder extended
 
 This is an updated package that enables users to record metrics for navigation involving people, both in simulation and real life.
 
