@@ -1,8 +1,8 @@
-# Social Robot Navigation metrics recorder
+# Social Robot Navigation metrics recorder extended
 
-This is a package that enables to record metrics for navigation involving people, both in simulation and real life.
+This is an updated package that enables users to record metrics for navigation involving people, both in simulation and real life.
 
-This package is compounded of two nodes: `/metrics_recorder_node` and `/collision_counter_node`. The following image shows the topic connections with these nodes:
+This package is compounded of three nodes: `/metrics_recorder_node`, `/acceleration_monitor_node` and `/collision_counter_node`. The following image shows the topic connections with these nodes:
 
 ![](https://i.imgur.com/o3xbjtv.png)
 
@@ -28,6 +28,10 @@ This node is in charge of recording different metrics for social robot navigatio
 
   Topic where it is stated whether the goal has been reached or not.
 
+- goal_position_topic (string, default: "/smf_move_base_planner/query_goal_pose_rviz")
+
+  Topic where it states the goal position.
+
 - odom_topic (string, default: "/odom")
 
   Robot odometry. Used in order to calculate some of the social robot navigation metrics.
@@ -43,7 +47,11 @@ This node is in charge of recording different metrics for social robot navigatio
 - collision_counter_topic (string, default: "/collision_counter")
 
   Topic with the amount of collisions that the robot has encountered.
+  
+- acceleration_monitor_topic (string, default: "/acceleration_monitor")
 
+  Topic with the linear and angular accelerations are published.
+  
 - measure_rate (double, default: 5)
 
   Time period in seconds between each measurement and recording.
@@ -88,6 +96,10 @@ The name of the subscribers' topics are just defined as an example, but they may
 
   If goal has been reached.
 
+- /goal_position ([geometry_msgs/PoseStamped](https://docs.ros.org/en/noetic/api/geometry_msgs/html/msg/PoseStamped.html))
+
+  Goal Position.
+
 - /pedsim_simulator/simulated_agents ([pedsim_msgs/AgentStates](https://github.com/CardiffUniversityComputationalRobotics/pedsim_ros/blob/noetic-devel/pedsim_msgs/msg/AgentStates.msg))
 
   Position, orientation and velocity of several social agents.
@@ -96,9 +108,37 @@ The name of the subscribers' topics are just defined as an example, but they may
 
   Odometry of the robot for the test.
 
-- /collision_counter ([std_msgs/Int32](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Int32.html))
+- /collision_counter ([std_msgs/Int32MultiArray](https://docs.ros.org/en/melodic/api/std_msgs/html/msg/Int32MultiArray.html))
 
-  Number of collisions the robot had with common obstacles and social agents.
+  Number of overall, agent and environment collisions the robot has.
+
+- /acceleration_monitor ([std_msgs/Float32MultiArray](https://docs.ros.org/en/melodic/api/std_msgs/html/msg/Float32MultiArray.html))
+
+  Linear and angular acceleration values
+
+## Acceleration Monitor Node
+
+This node is in charge of sending linear and angular acceleration values.
+
+### Parameters
+
+- odom_topic (string, default: "/odom")
+
+  Robot odometry. Used in order to calculate some of the social robot navigation metrics.
+
+### Subscribers
+
+The name of the subscribers' topics are just defined as an example, but they may be configured using the parameters defined before.
+
+- /odom ([nav_msgs/Odometry](http://docs.ros.org/en/noetic/api/nav_msgs/html/msg/Odometry.html))
+
+  Odometry of the robot for the test.
+
+### Publishers
+
+- /acceleration_monitor ([std_msgs/Float32MultiArray](https://docs.ros.org/en/melodic/api/std_msgs/html/msg/Float32MultiArray.html))
+
+  Linear and angular acceleration values
 
 ## Collision Counter Node
 
@@ -148,9 +188,9 @@ The name of the subscribers' topics are just defined as an example, but they may
 
 ### Publishers
 
-- /collision_counter ([std_msgs/Int32](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Int32.html))
+- /collision_counter ([std_msgs/Int32MultiArray](https://docs.ros.org/en/melodic/api/std_msgs/html/msg/Int32MultiArray.html))
 
-  Number of collisions that the robot had during one of the tests.
+  Number of overall, agent and environment collisions that the robot had during one of the tests.
 
 ### Services
 
@@ -186,6 +226,10 @@ Here you are provided with a `launch` file that can be used to deploy the code p
     <node pkg="social_nav_metrics" type="collision_counter" name="collision_counter_node" output="screen">
         <rosparam command="load" file="$(find social_nav_metrics)/config/config_example.yaml"/>
     </node>
+
+    <node pkg="social_nav_metrics" type="acceleration_monitor.py" name="acceleration_monitor_node" output="screen">
+        <rosparam command="load" file="$(find social_nav_metrics)/config/config_example.yaml"/>
+    </node>
 </launch>
 ```
 
@@ -199,10 +243,12 @@ clock_topic: "/clock"
 cpu_topic: "/cpu_monitor/smf_move_base_planner/cpu"
 goal_reached_topic: "/smf_move_base_planner/goal_reached"
 goal_topic: "/goal_available"
+goal_position_topic: "/smf_move_base_planner/query_goal_pose_rviz"
 collision_counter_topic: "/collision_counter"
 num_nodes_topic: "/smf_move_base_planner/smf_num_nodes" # only considered if the approach is sampling based
 agent_states_topic: "/pedsim_simulator/simulated_agents"
 odom_topic: "/pepper/odom_groundtruth"
+acceleration_monitor_topic: "/acceleration_monitor"
 
 # octomap service
 octomap_service: /smf_move_base_mapper/get_binary
@@ -211,6 +257,8 @@ octomap_service: /smf_move_base_mapper/get_binary
 robot_radius: 0.3
 robot_height: 1.0
 agent_radius: 0.45
+robot_max_velocity: 0.22
+agent_max_velocity: 0.5
 
 # ! measuring characteristics
 measure_rate: 0.5
