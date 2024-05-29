@@ -542,8 +542,16 @@ class MetricsRecorder:
                     self.current_time_ = time.time()
                 if self.current_time_ - self.last_time_ >= self.measure_period_:
                     if self.current_cpu_:
+                        if len(self.current_cpu_) > 1000:
+                            self.current_cpu_ = np.array(
+                                [np.average(self.current_cpu_)], dtype=np.float64
+                            )
                         self.cpu_list_ = np.append(self.cpu_list_, self.current_cpu_)
                     if self.current_num_nodes_:
+                        if len(self.self.num_nodes_) > 1000:
+                            self.self.num_nodes_ = np.array(
+                                [np.average(self.self.num_nodes_)], dtype=np.float64
+                            )
                         self.num_nodes_ = np.append(
                             self.num_nodes_, self.current_num_nodes_
                         )
@@ -553,8 +561,16 @@ class MetricsRecorder:
                         and self.agent_states_
                     ):
                         rmi = self.calculate_rmi()
+                        if len(self.rmi_) > 1000:
+                            self.rmi_ = np.array(
+                                [np.average(self.rmi_)], dtype=np.float64
+                            )
                         self.rmi_ = np.append(self.rmi_, rmi)
                         sii = self.calculate_sii()
+                        if len(self.sii_) > 1000:
+                            self.sii_ = np.array(
+                                [np.average(self.sii_)], dtype=np.float64
+                            )
                         self.sii_ = np.append(self.sii_, sii)
 
                         if self.past_robot_position_ and self.past_robot_velocities_:
@@ -562,6 +578,11 @@ class MetricsRecorder:
                             path_irregularity = self.calculate_path_irregularity()
 
                             if path_irregularity >= 0:
+                                if len(self.path_irregularity_) > 1000:
+                                    self.path_irregularity_ = np.array(
+                                        [np.average(self.path_irregularity_)],
+                                        dtype=np.float64,
+                                    )
                                 self.path_irregularity_ = np.append(
                                     self.path_irregularity_, path_irregularity
                                 )
@@ -570,6 +591,11 @@ class MetricsRecorder:
                             acc_per_segment = self.calculate_acc_per_segment()
 
                             if acc_per_segment >= 0:
+                                if len(self.acceleration_per_segment__) > 1000:
+                                    self.acceleration_per_segment_ = np.array(
+                                        [np.average(self.acceleration_per_segment_)],
+                                        dtype=np.float64,
+                                    )
                                 self.acceleration_per_segment_ = np.append(
                                     self.acceleration_per_segment_, acc_per_segment
                                 )
