@@ -504,10 +504,13 @@ class MetricsRecorder:
             min((2 * math.pi) - abs(old_angle - new_angle), abs(old_angle - new_angle))
         )
 
-        if distance_change > 0.001:
+        if distance_change < 0.001 and angle_change < 0.001:
+            path_irregularity = -1
+        elif distance_change < 0.001:
+            distance_change = 0.001
             path_irregularity = float(angle_change / distance_change)
         else:
-            path_irregularity = -1
+            path_irregularity = float(angle_change / distance_change)
 
         if path_irregularity > 10:
             path_irregularity = 10
