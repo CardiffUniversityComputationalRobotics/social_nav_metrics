@@ -109,7 +109,7 @@ class MetricsRecorder:
             except:
                 writer.writeheader()
 
-            if last_data is not None:
+            if last_data is None:
                 last_data_index = 1
             else:
                 last_data_index = int(last_data[1]) + 1
@@ -548,9 +548,9 @@ class MetricsRecorder:
                             )
                         self.cpu_list_ = np.append(self.cpu_list_, self.current_cpu_)
                     if self.current_num_nodes_:
-                        if len(self.self.num_nodes_) > 1000:
-                            self.self.num_nodes_ = np.array(
-                                [np.average(self.self.num_nodes_)], dtype=np.float64
+                        if len(self.num_nodes_) > 1000:
+                            self.num_nodes_ = np.array(
+                                [np.average(self.num_nodes_)], dtype=np.float64
                             )
                         self.num_nodes_ = np.append(
                             self.num_nodes_, self.current_num_nodes_
@@ -576,7 +576,6 @@ class MetricsRecorder:
                         if self.past_robot_position_ and self.past_robot_velocities_:
                             # measure path irregularity
                             path_irregularity = self.calculate_path_irregularity()
-
                             if path_irregularity >= 0:
                                 if len(self.path_irregularity_) > 1000:
                                     self.path_irregularity_ = np.array(
@@ -589,9 +588,8 @@ class MetricsRecorder:
 
                             # measure aceleration per segment
                             acc_per_segment = self.calculate_acc_per_segment()
-
                             if acc_per_segment >= 0:
-                                if len(self.acceleration_per_segment__) > 1000:
+                                if len(self.acceleration_per_segment_) > 1000:
                                     self.acceleration_per_segment_ = np.array(
                                         [np.average(self.acceleration_per_segment_)],
                                         dtype=np.float64,
