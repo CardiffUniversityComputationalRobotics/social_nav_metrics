@@ -49,6 +49,21 @@ class MetricsRecorder:
         """Saves value of the measured metrics in a new or previously given csv"""
         rospy.loginfo("About to save test measurements.")
 
+        fieldnames = [
+            "test_number",
+            "time",
+            "goal_reached",
+            "average_sii",
+            "average_rmi",
+            "total_time",
+            "average_cpu",
+            "collision_counter",
+            "num_nodes",
+            "path_irregularity",
+            "acc_per_segment",
+            "path_length",
+        ]
+
         # in case num_nodes is not considered, just make it zero
         if len(self.num_nodes_) == 0:
             self.num_nodes_ = np.append(self.num_nodes_, 0)
@@ -86,82 +101,38 @@ class MetricsRecorder:
             encoding="utf-8",
         ) as csvfile_read:
             reader = csv.reader(csvfile_read)
-            fieldnames = [
-                "test_number",
-                "time",
-                "goal_reached",
-                "average_sii",
-                "average_rmi",
-                "total_time",
-                "average_cpu",
-                "collision_counter",
-                "num_nodes",
-                "path_irregularity",
-                "acc_per_segment",
-                "path_length",
-            ]
+
             writer = csv.DictWriter(csvfile_write, fieldnames=fieldnames)
             try:
-                if next(reader) != [
-                    "test_number",
-                    "time",
-                    "goal_reached",
-                    "average_sii",
-                    "average_rmi",
-                    "total_time",
-                    "average_cpu",
-                    "collision_counter",
-                    "num_nodes",
-                    "path_irregularity",
-                    "acc_per_segment",
-                    "path_length",
-                ]:
+                if next(reader) != fieldnames:
                     writer.writeheader()
             except:
                 writer.writeheader()
 
             if last_data is not None:
-                writer.writerow(
-                    {
-                        "test_number": int(last_data[1]) + 1,
-                        "time": dt_string,
-                        "goal_reached": self.goal_reached_,
-                        "average_sii": round(np.average(self.sii_), 4),
-                        "average_rmi": round(np.average(self.rmi_), 4),
-                        "total_time": self.total_time_,
-                        "average_cpu": round(np.average(self.cpu_list_), 4),
-                        "collision_counter": self.collision_counter_,
-                        "num_nodes": int(np.average(self.num_nodes_)),
-                        "path_irregularity": round(
-                            np.average(self.path_irregularity_), 4
-                        ),
-                        "acc_per_segment": round(
-                            np.average(self.acceleration_per_segment_), 4
-                        ),
-                        "path_length": self.path_length_,
-                    }
-                )
+                last_data_index = 1
             else:
-                writer.writerow(
-                    {
-                        "test_number": 1,
-                        "time": dt_string,
-                        "goal_reached": self.goal_reached_,
-                        "average_sii": round(np.average(self.sii_), 4),
-                        "average_rmi": round(np.average(self.rmi_), 4),
-                        "total_time": self.total_time_,
-                        "average_cpu": round(np.average(self.cpu_list_), 4),
-                        "collision_counter": self.collision_counter_,
-                        "num_nodes": int(np.average(self.num_nodes_)),
-                        "path_irregularity": round(
-                            np.average(self.path_irregularity_), 4
-                        ),
-                        "acc_per_segment": round(
-                            np.average(self.acceleration_per_segment_), 4
-                        ),
-                        "path_length": self.path_length_,
-                    }
-                )
+                last_data_index = int(last_data[1]) + 1
+
+            writer.writerow(
+                {
+                    "test_number": last_data_index,
+                    "time": dt_string,
+                    "goal_reached": self.goal_reached_,
+                    "average_sii": round(np.average(self.sii_), 4),
+                    "average_rmi": round(np.average(self.rmi_), 4),
+                    "total_time": self.total_time_,
+                    "average_cpu": round(np.average(self.cpu_list_), 4),
+                    "collision_counter": self.collision_counter_,
+                    "num_nodes": int(np.average(self.num_nodes_)),
+                    "path_irregularity": round(np.average(self.path_irregularity_), 4),
+                    "acc_per_segment": round(
+                        np.average(self.acceleration_per_segment_), 4
+                    ),
+                    "path_length": self.path_length_,
+                }
+            )
+
             rospy.loginfo("Metrics for test saved.")
             csvfile_write.close()
             csvfile_read.close()
@@ -587,7 +558,6 @@ class MetricsRecorder:
                         self.sii_ = np.append(self.sii_, sii)
 
                         if self.past_robot_position_ and self.past_robot_velocities_:
-
                             # measure path irregularity
                             path_irregularity = self.calculate_path_irregularity()
 
