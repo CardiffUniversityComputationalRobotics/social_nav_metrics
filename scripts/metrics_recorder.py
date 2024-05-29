@@ -121,7 +121,7 @@ class MetricsRecorder:
                     "goal_reached": self.goal_reached_,
                     "average_sii": round(np.average(self.sii_), 4),
                     "average_rmi": round(np.average(self.rmi_), 4),
-                    "total_time": self.total_time_,
+                    "total_time": round(self.total_time_, 4),
                     "average_cpu": round(np.average(self.cpu_list_), 4),
                     "collision_counter": self.collision_counter_,
                     "num_nodes": int(np.average(self.num_nodes_)),
