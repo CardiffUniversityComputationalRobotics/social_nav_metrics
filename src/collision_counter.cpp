@@ -46,9 +46,6 @@ public:
 
         collision_counter_ = 0;
 
-        // timer_ = this->create_wall_timer(
-        //     100ms, std::bind(&CollisionCounterNode::timer_callback, this));
-
         odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(odom_topic, 1, std::bind(&CollisionCounterNode::odom_callback, this, _1));
 
         agent_states_subscription_ = this->create_subscription<pedsim_msgs::msg::AgentStates>(agent_states_topic, 1, std::bind(&CollisionCounterNode::agent_states_callback, this, _1));
@@ -58,11 +55,36 @@ public:
         collision_counter_publisher_ = this->create_publisher<std_msgs::msg::Int32>(collision_counter_topic, 1);
 
         // Check if the service is available
-        if (!octomap_client_->wait_for_service(1s))
+        if (!octomap_client_->wait_for_service(10s))
         {
             RCLCPP_WARN(this->get_logger(), "Octomap service not available");
             return;
         }
+
+        // Create a request and response for the service call
+        auto request = std::make_shared<octomap_msgs::srv::GetOctomap::Request>();
+        auto response = octomap_client_->async_send_request(request);
+
+        // Wait for the response (blocking call)
+        if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), response) !=
+            rclcpp::FutureReturnCode::SUCCESS)
+        {
+            RCLCPP_ERROR(this->get_logger(), "Failed to call service get_octomap");
+            return;
+        }
+
+        auto result = response.get()->map;
+        octomap::AbstractOcTree *abs_octree = octomap_msgs::msgToMap(result);
+
+        if (!abs_octree)
+        {
+            RCLCPP_WARN(this->get_logger(), "Failed to convert octomap message to octree");
+            return;
+        }
+
+        auto octree = dynamic_cast<octomap::OcTree *>(abs_octree);
+        auto tree = std::make_shared<fcl::OcTree<double>>(std::make_shared<const octomap::OcTree>(*octree));
+        tree_obj_ = std::make_shared<fcl::CollisionObject<double>>(tree);
     }
 
     void timer_callback();
@@ -85,9 +107,11 @@ private:
 
     std::shared_ptr<fcl::Cylinder<double>> robot_collision_solid_, agent_collision_solid_;
 
+    std::shared_ptr<fcl::CollisionObjectd> tree_obj_;
+
     double robot_height_, robot_radius_, agent_radius_;
     bool in_collision_;
-    int collision_counter_;
+    int collision_counter_ = false;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
@@ -101,100 +125,59 @@ void CollisionCounterNode::timer_callback()
     while (rclcpp::ok())
     {
 
-        RCLCPP_WARN(this->get_logger(), "TESTING");
-        in_collision_ = false;
-
-        // Create a request and response for the service call
-        auto request = std::make_shared<octomap_msgs::srv::GetOctomap::Request>();
-        auto response = octomap_client_->async_send_request(request);
-
-        RCLCPP_WARN(this->get_logger(), "got octomap");
-
-        RCLCPP_WARN(this->get_logger(), "got octomap");
-
-        // Wait for the response (blocking call)
-        if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), response) !=
-            rclcpp::FutureReturnCode::SUCCESS)
+        if (odom_data_ && agent_states_)
         {
-            RCLCPP_ERROR(this->get_logger(), "Failed to call service get_octomap");
-            return;
-        }
 
-        RCLCPP_WARN(this->get_logger(), "got octomap");
+            fcl::CollisionRequest<double> collision_request;
+            fcl::CollisionResult<double> collision_result_octomap;
+            fcl::CollisionResult<double> collision_result;
 
-        auto result = response.get()->map;
-        RCLCPP_WARN(this->get_logger(), "got octomap");
-        octomap::AbstractOcTree *abs_octree = octomap_msgs::msgToMap(result);
+            // Check for collision with octomap
+            fcl::CollisionObject<double> vehicle_co(robot_collision_solid_);
+            vehicle_co.setTranslation(fcl::Vector3<double>(odom_data_->pose.pose.position.x, odom_data_->pose.pose.position.y, robot_height_ / 2.0));
+            fcl::collide(tree_obj_.get(), &vehicle_co, collision_request, collision_result_octomap);
 
-        RCLCPP_WARN(this->get_logger(), "got octomap");
-
-        if (!abs_octree)
-        {
-            RCLCPP_WARN(this->get_logger(), "Failed to convert octomap message to octree");
-            return;
-        }
-
-        auto octree = dynamic_cast<octomap::OcTree *>(abs_octree);
-        auto tree = std::make_shared<fcl::OcTree<double>>(std::make_shared<const octomap::OcTree>(*octree));
-        auto tree_obj = std::make_shared<fcl::CollisionObject<double>>(tree);
-
-        if (!odom_data_ || !agent_states_)
-        {
-            RCLCPP_WARN(this->get_logger(), "Waiting for odometry and agent states data");
-            return;
-        }
-
-        fcl::CollisionRequest<double> collision_request;
-        fcl::CollisionResult<double> collision_result_octomap;
-        fcl::CollisionResult<double> collision_result;
-
-        // Check for collision with octomap
-        fcl::CollisionObject<double> vehicle_co(robot_collision_solid_);
-        vehicle_co.setTranslation(fcl::Vector3<double>(odom_data_->pose.pose.position.x, odom_data_->pose.pose.position.y, robot_height_ / 2.0));
-        fcl::collide(tree_obj.get(), &vehicle_co, collision_request, collision_result_octomap);
-
-        // Check for collision with social agents
-        bool found_collision = false;
-        for (const auto &agent_state : agent_states_->agent_states)
-        {
-            double d_robot_agent = std::sqrt(std::pow(agent_state.pose.position.x - odom_data_->pose.pose.position.x, 2) +
-                                             std::pow(agent_state.pose.position.y - odom_data_->pose.pose.position.y, 2));
-
-            if (d_robot_agent <= (robot_radius_ + agent_radius_))
+            // Check for collision with social agents
+            bool found_collision = false;
+            for (const auto &agent_state : agent_states_->agent_states)
             {
-                fcl::CollisionObject<double> agent_co(agent_collision_solid_);
-                agent_co.setTranslation(fcl::Vector3<double>(agent_state.pose.position.x, agent_state.pose.position.y, robot_height_ / 2.0));
-                fcl::collide(&agent_co, &vehicle_co, collision_request, collision_result);
+                double d_robot_agent = std::sqrt(std::pow(agent_state.pose.position.x - odom_data_->pose.pose.position.x, 2) +
+                                                 std::pow(agent_state.pose.position.y - odom_data_->pose.pose.position.y, 2));
 
-                if (collision_result.isCollision())
+                if (d_robot_agent <= (robot_radius_ + agent_radius_))
                 {
-                    found_collision = true;
+                    fcl::CollisionObject<double> agent_co(agent_collision_solid_);
+                    agent_co.setTranslation(fcl::Vector3<double>(agent_state.pose.position.x, agent_state.pose.position.y, robot_height_ / 2.0));
+                    fcl::collide(&agent_co, &vehicle_co, collision_request, collision_result);
+
+                    if (collision_result.isCollision())
+                    {
+                        found_collision = true;
+                    }
                 }
             }
-        }
-        RCLCPP_WARN(this->get_logger(), "TESTING");
 
-        if (!in_collision_)
-        {
-            if (collision_result_octomap.isCollision() || found_collision)
+            if (!in_collision_)
             {
-                collision_counter_++;
-                in_collision_ = true;
+                if (collision_result_octomap.isCollision() || found_collision)
+                {
+                    collision_counter_++;
+                    in_collision_ = true;
+                }
             }
-        }
-        else
-        {
-            if (!collision_result_octomap.isCollision() && !found_collision)
+            else
             {
-                in_collision_ = false;
+                if (!collision_result_octomap.isCollision() && !found_collision)
+                {
+                    in_collision_ = false;
+                }
             }
+
+            std_msgs::msg::Int32 collision_counter_msg;
+            collision_counter_msg.data = collision_counter_;
+            collision_counter_publisher_->publish(collision_counter_msg);
         }
-
-        std_msgs::msg::Int32 collision_counter_msg;
-        collision_counter_msg.data = collision_counter_;
-        collision_counter_publisher_->publish(collision_counter_msg);
-
-        rclcpp::spin_some(this->shared_from_this());
+        rclcpp::spin_some(this->get_node_base_interface());
     }
 }
 
@@ -203,7 +186,6 @@ int main(int argc, char *argv[])
     rclcpp::init(argc, argv);
     CollisionCounterNode collision_counter_node;
     collision_counter_node.timer_callback();
-    // rclcpp::spin(collision_counter_node);
     rclcpp::shutdown();
     return 0;
 }
