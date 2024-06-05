@@ -1,28 +1,42 @@
-# !TOPICS
-clock_topic: "/clock"
-cpu_topic: "/cpu_monitor/smf_move_base_planner/cpu"
-goal_reached_topic: "/smf_move_base_planner/goal_reached"
-goal_topic: "/goal_available"
-collision_counter_topic: "/collision_counter"
-num_nodes_topic: "/smf_move_base_planner/smf_num_nodes" # only considered if the approach is sampling based
-agent_states_topic: "/pedsim_simulator/simulated_agents"
-odom_topic: "/pepper/odom_groundtruth"
+metrics_recorder_node:
+  ros__parameters:
+    # !TOPICS
+    clock_topic: "/clock"
+    cpu_topic: "/cpu_monitor/smf_move_base_planner/cpu"
+    goal_reached_topic: "/smf_move_base_planner/goal_reached"
+    goal_topic: "/goal_available"
+    collision_counter_topic: "/collision_counter"
+    num_nodes_topic: "/smf_move_base_planner/smf_num_nodes" # only considered if the approach is sampling based
+    agent_states_topic: "/pedsim_simulator/simulated_agents"
+    odom_topic: "/odom"
 
-# octomap service
-octomap_service: /smf_move_base_mapper/get_binary
+    #! robot and agents params
+    robot_radius: 0.3
+    robot_height: 1.0
+    agent_radius: 0.45
 
-#! robot and agents params
-robot_radius: 0.3
-robot_height: 1.0
-agent_radius: 0.45
+    # ! measuring characteristics
+    measure_rate: 10
+    sim: True # whether the test is being done in simulation or real experiment
 
-# ! measuring characteristics
-measure_rate: 0.5
-sim: True # whether the test is being done in simulation or real experiment
+    #! saving files config
+    csv_dir: "/home/sasm/ros/humble/system/src/social_nav_metrics/results"
+    approach_name: "tests"
+    csv_name: "new_test.csv"
 
-#! saving files config
-csv_dir: "/home/sasm/ros/noetic/system/src/pepper_social_nav_tests/results"
-approach_name: "smf_planner"
-csv_name: "new_test.csv"
+    max_test_time: 500
 
-max_test_time: 500
+collision_counter_node:
+  ros__parameters:
+    # !TOPICS
+    odom_topic: "/odom"
+    agent_states_topic: "/pedsim_simulator/simulated_agents"
+    collision_counter_topic: "/collision_counter"
+
+    # octomap service
+    octomap_service: /octomap_full
+
+    #! robot and agents params
+    robot_radius: 0.3
+    robot_height: 1.0
+    agent_radius: 0.45

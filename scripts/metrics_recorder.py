@@ -4,13 +4,15 @@ import csv
 from datetime import datetime
 import math
 import time
-import tf
-import rospy
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile
 from std_msgs.msg import Float32, Int32, Bool
 import numpy as np
 from rosgraph_msgs.msg import Clock
 from pedsim_msgs.msg import AgentStates
 from nav_msgs.msg import Odometry
+from tf_transformations import euler_from_quaternion
 
 
 def import_csv(csvfilename):
@@ -41,14 +43,13 @@ def import_csv(csvfilename):
     return data
 
 
-class MetricsRecorder:
+class MetricsRecorder(Node):
     """This class manages the measurement of the included metrics for social robot navigation
     and saves the metrics on a CSV"""
 
     def save_value_csv(self):
         """Saves value of the measured metrics in a new or previously given csv"""
-        rospy.loginfo("About to save test measurements.")
-
+        self.get_logger().info("About to save test measurements.")
         fieldnames = [
             "test_number",
             "time",
@@ -78,16 +79,10 @@ class MetricsRecorder:
             )
             last_data = csv_read_data[-1]
         except OSError:
-            rospy.logwarn("Could not open the defined CSV file")
+            self.get_logger().warn("Could not open the defined CSV file")
 
-        rospy.loginfo(
-            "Provided CSV at "
-            + self.csv_dir_
-            + "/"
-            + self.approach_name_
-            + "/"
-            + self.csv_name_
-            + " has been imported."
+        self.get_logger().info(
+            f"Provided CSV at {self.csv_dir_}/{self.approach_name_}/{self.csv_name_} has been imported."
         )
 
         with open(
@@ -133,16 +128,88 @@ class MetricsRecorder:
                 }
             )
 
-            rospy.loginfo("Metrics for test saved.")
+            self.get_logger().info("Metrics for test saved.")
             csvfile_write.close()
             csvfile_read.close()
 
     def __init__(self):
-        rospy.init_node("social_nav_metrics_recorder", anonymous=True)
+        super().__init__("metrics_recorder_node")
 
-        rospy.on_shutdown(self.save_value_csv)
+        #! PARAMETERS DECLARED
+        self.declare_parameters(
+            namespace="",
+            parameters=[
+                ("clock_topic", "/clock"),
+                ("cpu_topic", "/cpu_monitor/planner/cpu"),
+                ("goal_reached_topic", "/goal_reached"),
+                ("goal_available_topic", "/goal_available"),
+                ("odom_topic", "/odom"),
+                ("num_nodes_topic", "/num_nodes"),
+                ("agent_states_topic", "/pedsim_simulator/simulated_agents"),
+                ("collision_counter_topic", "/collision_counter"),
+                ("measure_rate", 5),
+                ("sim", True),
+                ("csv_dir", ""),
+                ("approach_name", ""),
+                ("csv_name", ""),
+            ],
+        )
+
+        # ! CONFIGS VALUES
+        # ===============================================
+        # ? TOPICS
+        self.clock_topic_ = (
+            self.get_parameter("clock_topic").get_parameter_value().string_value
+        )
+        self.cpu_topic_ = (
+            self.get_parameter("cpu_topic").get_parameter_value().string_value
+        )
+        self.goal_reached_topic_ = (
+            self.get_parameter("goal_reached_topic").get_parameter_value().string_value
+        )
+        self.goal_available_topic_ = (
+            self.get_parameter("goal_available_topic")
+            .get_parameter_value()
+            .string_value
+        )
+        self.odom_topic_ = (
+            self.get_parameter("odom_topic").get_parameter_value().string_value
+        )
+        self.num_nodes_topic = (
+            self.get_parameter("num_nodes_topic").get_parameter_value().string_value
+        )
+        self.agent_states_topic_ = (
+            self.get_parameter("agent_states_topic").get_parameter_value().string_value
+        )
+        self.collision_counter_topic_ = (
+            self.get_parameter("collision_counter_topic")
+            .get_parameter_value()
+            .string_value
+        )
+
+        print(self.agent_states_topic_)
+
+        # ? RATE PARAM
+        self.measure_rate_ = (
+            self.get_parameter("measure_rate").get_parameter_value().double_value
+        )
+        print(self.measure_rate_)
+        self.sim = self.get_parameter("sim").get_parameter_value().bool_value
+
+        # ? CSV SAVING PARAMS
+        self.csv_dir_ = self.get_parameter("csv_dir").get_parameter_value().string_value
+        self.approach_name_ = (
+            self.get_parameter("approach_name").get_parameter_value().string_value
+        )
+        self.csv_name_ = (
+            self.get_parameter("csv_name").get_parameter_value().string_value
+        )
+
+        # =============================
 
         # ! RECORDING VARIABLES
+        self.measure_period_ = float(1 / self.measure_rate_)
+
         # POSITIONS AND ORIENTATIONS
         self.past_robot_position_ = None
         self.robot_position_ = None
@@ -176,35 +243,6 @@ class MetricsRecorder:
         self.d_c = 1.2
         self.sigma_p = self.d_c / 2
         self.final_sigma = math.sqrt(2) * self.sigma_p
-
-        # ====================================================
-
-        #! LAMBDA FUNCTIONS
-        # ? RELATIVE MOTION INDEX
-        self.rmi_value = (
-            lambda v_r, beta, v_a, alpha, x_agent, y_agent, x_robot, y_robot: (
-                2 + v_r * np.cos(beta) + v_a * np.cos(alpha)
-            )
-            / (np.sqrt(math.pow(x_agent - x_robot, 2) + math.pow(y_agent - y_robot, 2)))
-        )
-
-        # ? SOCIAL INDIVIDUAL INDEX
-        self.sii_value = lambda x_agent, y_agent, x_robot, y_robot: (
-            math.pow(
-                math.e,
-                -(
-                    math.pow(
-                        (x_robot - x_agent) / (self.final_sigma),
-                        2,
-                    )
-                    + math.pow(
-                        (y_robot - y_agent) / (self.final_sigma),
-                        2,
-                    )
-                ),
-            )
-        )
-
         # GOAL FLAG
         self.goal_available_ = False
 
@@ -217,76 +255,65 @@ class MetricsRecorder:
         self.cpu_list_ = np.array([], dtype=np.float64)
         # ================================================
 
-        # ! CONFIGS VALUES
-        # ===============================================
-
-        # ? TOPICS
-        self.clock_topic_ = rospy.get_param("~clock_topic", "/clock")
-        self.cpu_topic_ = rospy.get_param("~cpu_topic", "/cpu_monitor/planner/cpu")
-        self.goal_reached_topic_ = rospy.get_param(
-            "~goal_reached_topic", "/goal_reached"
-        )
-        self.goal_available_topic_ = rospy.get_param(
-            "~goal_available_topic", "/goal_available"
-        )
-        self.odom_topic_ = rospy.get_param("~odom_topic", "/odom")
-        self.num_nodes_topic = rospy.get_param("~num_nodes_topic", "/num_nodes")
-        self.agents_states_topic_ = rospy.get_param(
-            "~agent_states_topic", "/pedsim_simulator/simulated_agents"
-        )
-        self.collision_counter_topic_ = rospy.get_param(
-            "~collision_counter_topic", "/collision_counter"
-        )
-
-        # ? RATE PARAM
-        self.measure_rate_ = rospy.get_param("~measure_rate", 5)
-        self.measure_period_ = float(1 / self.measure_rate_)
-        self.sim = rospy.get_param("~sim", True)
-
-        # ? CSV SAVING PARAMS
-        self.csv_dir_ = rospy.get_param("~csv_dir")
-        self.approach_name_ = rospy.get_param("~approach_name")
-        self.csv_name_ = rospy.get_param("~csv_name")
-        # ================================================
-
         #! SUBSCRIBERS
         # ================================================
+        qos_profile = QoSProfile(depth=10)
+
         if self.sim:
-            rospy.Subscriber(
-                self.clock_topic_,
-                Clock,
-                self.clock_callback,
-                queue_size=1,
+            self.create_subscription(
+                Clock, self.clock_topic_, self.clock_callback, qos_profile
             )
-        rospy.Subscriber(
-            self.cpu_topic_,
-            Float32,
-            self.cpu_callback,
-            queue_size=1,
+        self.create_subscription(
+            Float32, self.cpu_topic_, self.cpu_callback, qos_profile
         )
-        rospy.Subscriber(
-            self.num_nodes_topic,
+        self.create_subscription(
+            Int32, self.num_nodes_topic, self.num_nodes_callback, qos_profile
+        )
+        self.create_subscription(
+            Bool, self.goal_available_topic_, self.goal_callback, qos_profile
+        )
+        self.create_subscription(
+            Bool, self.goal_reached_topic_, self.goal_reached_callback, qos_profile
+        )
+        self.create_subscription(
+            AgentStates, self.agent_states_topic_, self.agents_callback, qos_profile
+        )
+        self.create_subscription(
+            Odometry, self.odom_topic_, self.odom_callback, qos_profile
+        )
+        self.create_subscription(
             Int32,
-            self.num_nodes_callback,
-            queue_size=1,
-        )
-        rospy.Subscriber(
-            self.goal_available_topic_, Bool, self.goal_callback, queue_size=1
-        )
-        rospy.Subscriber(
-            self.goal_reached_topic_,
-            Bool,
-            self.goal_reached_callback,
-            queue_size=1,
-        )
-        rospy.Subscriber(
-            self.agents_states_topic_, AgentStates, self.agents_callback, queue_size=1
-        )
-        rospy.Subscriber(self.odom_topic_, Odometry, self.odom_callback)
-        rospy.Subscriber(
-            self.collision_counter_topic_, Int32, self.collision_counter_callback
+            self.collision_counter_topic_,
+            self.collision_counter_callback,
+            qos_profile,
         )
         # ======================================================
+
+        #! LAMBDA FUNCTIONS
+        # ? RELATIVE MOTION INDEX
+        self.rmi_value = (
+            lambda v_r, beta, v_a, alpha, x_agent, y_agent, x_robot, y_robot: (
+                (2 + v_r * np.cos(beta) + v_a * np.cos(alpha))
+                / (
+                    np.sqrt(
+                        math.pow(x_agent - x_robot, 2) + math.pow(y_agent - y_robot, 2)
+                    )
+                )
+            )
+        )
+
+        # ? SOCIAL INDIVIDUAL INDEX
+        self.sii_value = lambda x_agent, y_agent, x_robot, y_robot: (
+            math.pow(
+                math.e,
+                -(
+                    math.pow((x_robot - x_agent) / (self.final_sigma), 2)
+                    + math.pow((y_robot - y_agent) / (self.final_sigma), 2)
+                ),
+            )
+        )
+
+        self.timer = self.create_timer(self.measure_period_, self.measure_values)
 
     # ! CALLBACKS
     # ===============================================
@@ -311,18 +338,17 @@ class MetricsRecorder:
 
     def clock_callback(self, msg: Clock):
         """Listens to the gazebo clock time if simulation is running."""
-        self.current_time_ = msg.clock.secs + float(msg.clock.nsecs / 1000000000)
+        self.current_time_ = msg.clock.sec + msg.clock.nanosec / 1e9
 
-    def cpu_callback(self, msg):
+    def cpu_callback(self, msg: Float32):
         """Listens to the CPU power used by the navigation system"""
-        if self.goal_available_:
-            self.current_cpu_ = msg.data
+        self.current_cpu_ = msg.data
 
-    def collision_counter_callback(self, msg):
+    def collision_counter_callback(self, msg: Int32):
         """Listens to the amount of collisions happening by an external node."""
         self.collision_counter_ = msg.data
 
-    def num_nodes_callback(self, msg):
+    def num_nodes_callback(self, msg: Int32):
         """Listens to the number of nodes sampled for the case of sampling based techniques"""
         self.current_num_nodes_ = msg.data
 
@@ -390,13 +416,13 @@ class MetricsRecorder:
             if alpha < 0:
                 alpha = 2 * math.pi + alpha
 
-            quaternion = (
+            quaternion = [
                 agent.pose.orientation.x,
                 agent.pose.orientation.y,
                 agent.pose.orientation.z,
                 agent.pose.orientation.w,
-            )
-            euler = tf.transformations.euler_from_quaternion(quaternion)
+            ]
+            euler = euler_from_quaternion(quaternion)
             yaw = euler[2]
 
             if yaw < 0:
@@ -534,81 +560,83 @@ class MetricsRecorder:
 
     # ========================================================
 
-    def run(self):
+    def measure_values(self):
         """Manages the time passed and recording of the metrics"""
-        while not rospy.is_shutdown():
-            if self.goal_available_:
-                if not self.sim:
-                    self.current_time_ = time.time()
-                if self.current_time_ - self.last_time_ >= self.measure_period_:
-                    if self.current_cpu_:
-                        if len(self.current_cpu_) > 1000:
-                            self.current_cpu_ = np.array(
-                                [np.average(self.current_cpu_)], dtype=np.float64
-                            )
-                        self.cpu_list_ = np.append(self.cpu_list_, self.current_cpu_)
-                    if self.current_num_nodes_:
-                        if len(self.num_nodes_) > 1000:
-                            self.num_nodes_ = np.array(
-                                [np.average(self.num_nodes_)], dtype=np.float64
-                            )
-                        self.num_nodes_ = np.append(
-                            self.num_nodes_, self.current_num_nodes_
+        if self.goal_available_:
+            if not self.sim:
+                self.current_time_ = time.time()
+            if self.current_time_ - self.last_time_ >= self.measure_period_:
+                if self.current_cpu_:
+                    if len(self.current_cpu_) > 1000:
+                        self.current_cpu_ = np.array(
+                            [np.average(self.current_cpu_)], dtype=np.float64
                         )
-                    if (
-                        self.robot_velocities_
-                        and self.robot_position_
-                        and self.agent_states_
-                    ):
-                        rmi = self.calculate_rmi()
-                        if len(self.rmi_) > 1000:
-                            self.rmi_ = np.array(
-                                [np.average(self.rmi_)], dtype=np.float64
-                            )
-                        self.rmi_ = np.append(self.rmi_, rmi)
-                        sii = self.calculate_sii()
-                        if len(self.sii_) > 1000:
-                            self.sii_ = np.array(
-                                [np.average(self.sii_)], dtype=np.float64
-                            )
-                        self.sii_ = np.append(self.sii_, sii)
+                    self.cpu_list_ = np.append(self.cpu_list_, self.current_cpu_)
+                if self.current_num_nodes_:
+                    if len(self.num_nodes_) > 1000:
+                        self.num_nodes_ = np.array(
+                            [np.average(self.num_nodes_)], dtype=np.float64
+                        )
+                    self.num_nodes_ = np.append(
+                        self.num_nodes_, self.current_num_nodes_
+                    )
+                if (
+                    self.robot_velocities_
+                    and self.robot_position_
+                    and self.agent_states_
+                ):
+                    rmi = self.calculate_rmi()
+                    if len(self.rmi_) > 1000:
+                        self.rmi_ = np.array([np.average(self.rmi_)], dtype=np.float64)
+                    self.rmi_ = np.append(self.rmi_, rmi)
+                    sii = self.calculate_sii()
+                    if len(self.sii_) > 1000:
+                        self.sii_ = np.array([np.average(self.sii_)], dtype=np.float64)
+                    self.sii_ = np.append(self.sii_, sii)
 
-                        if self.past_robot_position_ and self.past_robot_velocities_:
-                            # measure path irregularity
-                            path_irregularity = self.calculate_path_irregularity()
-                            if path_irregularity >= 0:
-                                if len(self.path_irregularity_) > 1000:
-                                    self.path_irregularity_ = np.array(
-                                        [np.average(self.path_irregularity_)],
-                                        dtype=np.float64,
-                                    )
-                                self.path_irregularity_ = np.append(
-                                    self.path_irregularity_, path_irregularity
+                    if self.past_robot_position_ and self.past_robot_velocities_:
+                        # measure path irregularity
+                        path_irregularity = self.calculate_path_irregularity()
+                        if path_irregularity >= 0:
+                            if len(self.path_irregularity_) > 1000:
+                                self.path_irregularity_ = np.array(
+                                    [np.average(self.path_irregularity_)],
+                                    dtype=np.float64,
                                 )
+                            self.path_irregularity_ = np.append(
+                                self.path_irregularity_, path_irregularity
+                            )
 
-                            # measure aceleration per segment
-                            acc_per_segment = self.calculate_acc_per_segment()
-                            if acc_per_segment >= 0:
-                                if len(self.acceleration_per_segment_) > 1000:
-                                    self.acceleration_per_segment_ = np.array(
-                                        [np.average(self.acceleration_per_segment_)],
-                                        dtype=np.float64,
-                                    )
-                                self.acceleration_per_segment_ = np.append(
-                                    self.acceleration_per_segment_, acc_per_segment
+                        # measure aceleration per segment
+                        acc_per_segment = self.calculate_acc_per_segment()
+                        if acc_per_segment >= 0:
+                            if len(self.acceleration_per_segment_) > 1000:
+                                self.acceleration_per_segment_ = np.array(
+                                    [np.average(self.acceleration_per_segment_)],
+                                    dtype=np.float64,
                                 )
+                            self.acceleration_per_segment_ = np.append(
+                                self.acceleration_per_segment_, acc_per_segment
+                            )
 
-                            self.past_robot_position_ = self.robot_position_
-                            self.past_robot_velocities_ = self.robot_velocities_
+                        self.past_robot_position_ = self.robot_position_
+                        self.past_robot_velocities_ = self.robot_velocities_
 
-                        else:
-                            self.past_robot_position_ = self.robot_position_
-                            self.past_robot_velocities_ = self.robot_velocities_
+                    else:
+                        self.past_robot_position_ = self.robot_position_
+                        self.past_robot_velocities_ = self.robot_velocities_
 
-                    self.last_time_ = self.current_time_
-            rospy.sleep(0.0001)
+                self.last_time_ = self.current_time_
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    metrics_recorder = MetricsRecorder()
+    rclpy.spin(metrics_recorder)
+    metrics_recorder.save_value_csv()
+    metrics_recorder.destroy_node()
+    rclpy.shutdown()
 
 
 if __name__ == "__main__":
-    csv_counter_saver = MetricsRecorder()
-    csv_counter_saver.run()
+    main()
