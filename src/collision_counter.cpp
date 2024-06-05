@@ -5,7 +5,9 @@
 #include "std_msgs/msg/int32.hpp"
 #include "octomap_msgs/msg/octomap.hpp"
 #include "octomap_msgs/srv/get_octomap.hpp"
+
 #include "octomap/octomap.h"
+#include "octomap_msgs/conversions.h"
 #include "fcl/geometry/octree/octree.h"
 #include "fcl/geometry/shape/cylinder.h"
 #include "fcl/narrowphase/collision.h"
@@ -15,6 +17,7 @@
 #include "fcl/broadphase/broadphase_spatialhash.h"
 
 using namespace std::chrono_literals;
+using std::placeholders::_1;
 
 class CollisionCounterNode : public rclcpp::Node
 {
@@ -22,49 +25,47 @@ public:
     CollisionCounterNode() : Node("collision_counter_node")
     {
         this->declare_parameter("robot_height", 1.0);
-        this->declare_parameter("robot_radius", 0.5);
+        this->declare_parameter("robot_radius", 0.25);
         this->declare_parameter("agent_radius", 0.3);
         this->declare_parameter("odom_topic", "/odom");
-        this->declare_parameter("agent_states_topic", "/agent_states");
-        this->declare_parameter("octomap_service", "/get_octomap");
+        this->declare_parameter("agent_states_topic", "/pedsim_simulator/simulated_agents");
+        this->declare_parameter("octomap_service", "/octomap_full");
         this->declare_parameter("collision_counter_topic", "/collision_counter");
 
-        double robot_height = this->get_parameter("robot_height").as_double();
-        double robot_radius = this->get_parameter("robot_radius").as_double();
-        double agent_radius = this->get_parameter("agent_radius").as_double();
+        robot_height_ = this->get_parameter("robot_height").as_double();
+        robot_radius_ = this->get_parameter("robot_radius").as_double();
+        agent_radius_ = this->get_parameter("agent_radius").as_double();
+
         std::string odom_topic = this->get_parameter("odom_topic").as_string();
         std::string agent_states_topic = this->get_parameter("agent_states_topic").as_string();
         std::string octomap_service = this->get_parameter("octomap_service").as_string();
         std::string collision_counter_topic = this->get_parameter("collision_counter_topic").as_string();
 
-        robot_collision_solid_ = std::make_shared<fcl::Cylinder<double>>(robot_radius, robot_height);
-        agent_collision_solid_ = std::make_shared<fcl::Cylinder<double>>(agent_radius, 1.5);
+        robot_collision_solid_ = std::make_shared<fcl::Cylinder<double>>(robot_radius_, robot_height_);
+        agent_collision_solid_ = std::make_shared<fcl::Cylinder<double>>(agent_radius_, 1.5);
 
-        timer_ = this->create_wall_timer(
-            500ms, std::bind(&CollisionCounterNode::timer_callback, this));
+        collision_counter_ = 0;
 
-        odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-            odom_topic,
-            1,
-            [this](const nav_msgs::msg::Odometry::SharedPtr msg)
-            {
-                this->odom_callback(msg);
-            });
+        // timer_ = this->create_wall_timer(
+        //     100ms, std::bind(&CollisionCounterNode::timer_callback, this));
 
-        agent_states_subscription_ = this->create_subscription<pedsim_msgs::msg::AgentStates>(
-            agent_states_topic,
-            1,
-            [this](const pedsim_msgs::msg::AgentStates::SharedPtr msg)
-            {
-                this->agent_states_callback(msg);
-            });
+        odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(odom_topic, 1, std::bind(&CollisionCounterNode::odom_callback, this, _1));
+
+        agent_states_subscription_ = this->create_subscription<pedsim_msgs::msg::AgentStates>(agent_states_topic, 1, std::bind(&CollisionCounterNode::agent_states_callback, this, _1));
 
         octomap_client_ = this->create_client<octomap_msgs::srv::GetOctomap>(octomap_service);
 
-        collision_counter_publisher_ = this->create_publisher<std_msgs::msg::Int32>(
-            collision_counter_topic,
-            1);
+        collision_counter_publisher_ = this->create_publisher<std_msgs::msg::Int32>(collision_counter_topic, 1);
+
+        // Check if the service is available
+        if (!octomap_client_->wait_for_service(1s))
+        {
+            RCLCPP_WARN(this->get_logger(), "Octomap service not available");
+            return;
+        }
     }
+
+    void timer_callback();
 
 private:
     void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
@@ -77,29 +78,55 @@ private:
         agent_states_ = msg;
     }
 
-    void timer_callback()
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
+    rclcpp::Subscription<pedsim_msgs::msg::AgentStates>::SharedPtr agent_states_subscription_;
+    rclcpp::Client<octomap_msgs::srv::GetOctomap>::SharedPtr octomap_client_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr collision_counter_publisher_;
+
+    std::shared_ptr<fcl::Cylinder<double>> robot_collision_solid_, agent_collision_solid_;
+
+    double robot_height_, robot_radius_, agent_radius_;
+    bool in_collision_;
+    int collision_counter_;
+
+    rclcpp::TimerBase::SharedPtr timer_;
+
+    nav_msgs::msg::Odometry::SharedPtr odom_data_;
+    pedsim_msgs::msg::AgentStates::SharedPtr agent_states_;
+};
+
+void CollisionCounterNode::timer_callback()
+{
+
+    while (rclcpp::ok())
     {
-        // Check if the service is available
-        if (!octomap_client_->wait_for_service(1s))
-        {
-            RCLCPP_WARN(this->get_logger(), "Octomap service not available");
-            return;
-        }
+
+        RCLCPP_WARN(this->get_logger(), "TESTING");
+        in_collision_ = false;
 
         // Create a request and response for the service call
         auto request = std::make_shared<octomap_msgs::srv::GetOctomap::Request>();
         auto response = octomap_client_->async_send_request(request);
 
+        RCLCPP_WARN(this->get_logger(), "got octomap");
+
+        RCLCPP_WARN(this->get_logger(), "got octomap");
+
         // Wait for the response (blocking call)
-        if (rclcpp::spin_until_future_complete(this->shared_from_this(), response) !=
+        if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), response) !=
             rclcpp::FutureReturnCode::SUCCESS)
         {
             RCLCPP_ERROR(this->get_logger(), "Failed to call service get_octomap");
             return;
         }
 
-        auto result = response.get();
-        octomap::AbstractOcTree *abs_octree = octomap_msgs::msgToMap(result->map);
+        RCLCPP_WARN(this->get_logger(), "got octomap");
+
+        auto result = response.get()->map;
+        RCLCPP_WARN(this->get_logger(), "got octomap");
+        octomap::AbstractOcTree *abs_octree = octomap_msgs::msgToMap(result);
+
+        RCLCPP_WARN(this->get_logger(), "got octomap");
 
         if (!abs_octree)
         {
@@ -145,6 +172,7 @@ private:
                 }
             }
         }
+        RCLCPP_WARN(this->get_logger(), "TESTING");
 
         if (!in_collision_)
         {
@@ -165,27 +193,17 @@ private:
         std_msgs::msg::Int32 collision_counter_msg;
         collision_counter_msg.data = collision_counter_;
         collision_counter_publisher_->publish(collision_counter_msg);
+
+        rclcpp::spin_some(this->shared_from_this());
     }
-
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
-    rclcpp::Subscription<pedsim_msgs::msg::AgentStates>::SharedPtr agent_states_subscription_;
-    rclcpp::Client<octomap_msgs::srv::GetOctomap>::SharedPtr octomap_client_;
-    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr collision_counter_publisher_;
-
-    std::shared_ptr<fcl::Cylinder<double>> robot_collision_solid_;
-    std::shared_ptr<fcl::Cylinder<double>> agent_collision_solid_;
-
-    rclcpp::TimerBase::SharedPtr timer_;
-
-    nav_msgs::msg::Odometry::SharedPtr odom_data_;
-    pedsim_msgs::msg::AgentStates::SharedPtr agent_states_;
-};
+}
 
 int main(int argc, char *argv[])
 {
     rclcpp::init(argc, argv);
-    auto collision_counter_node = std::make_shared<CollisionCounterNode>();
-    rclcpp::spin(collision_counter_node);
+    CollisionCounterNode collision_counter_node;
+    collision_counter_node.timer_callback();
+    // rclcpp::spin(collision_counter_node);
     rclcpp::shutdown();
     return 0;
 }

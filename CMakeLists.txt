@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.8)
 project(social_nav_metrics)
 
+if(NOT CMAKE_C_STANDARD)
+  set(CMAKE_C_STANDARD 99)
+endif()
+
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -24,10 +34,8 @@ find_package(nav_msgs REQUIRED)
 find_package(pedsim_msgs REQUIRED)
 find_package(OCTOMAP REQUIRED)
 find_package(octomap_msgs REQUIRED)
-find_package(tf2 REQUIRED)
-find_package(tf2_ros REQUIRED)
-find_package(tf2_eigen REQUIRED)
-find_package(Eigen3 REQUIRED)
+find_package(octomap_server REQUIRED)
+
 
 set(dependencies
 rclcpp
@@ -45,9 +53,6 @@ SYSTEM
 
 # Add links to PCL definitons and directories
 include_directories(${FCL_INCLUDE_DIRS})
-include_directories(${CCD_INCLUDE_DIRS})
-include_directories(${EIGEN3_INCLUDE_DIRS})
-add_definitions(${EIGEN3_DEFINITIONS})
 
 ament_python_install_package(${PROJECT_NAME})
 
@@ -67,8 +72,8 @@ ament_target_dependencies(collision_counter
   nav_msgs
   pedsim_msgs
   octomap_msgs
+  octomap_server
   ${fcl_LIBRARIES}
-  ${CCD_LIBRARIES}
 )
 target_link_libraries(collision_counter ${LIBFCL_LIBRARIES} ${OCTOMAP_LIBRARIES} ${OMPL_LIBRARIES})
 
