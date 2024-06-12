@@ -80,9 +80,9 @@ class MetricsRecorder(Node):
             )
             last_data = csv_read_data[-1]
         except OSError:
-            self.get_logger().warn("Could not open the defined CSV file")
+            self.get_logger().warning("Could not open the defined CSV file")
 
-        self.get_logger().info(
+        self.get_logger().warning(
             f"Provided CSV at {self.csv_dir_}/{self.approach_name_}/{self.csv_name_} has been imported."
         )
 
@@ -129,7 +129,7 @@ class MetricsRecorder(Node):
                 }
             )
 
-            self.get_logger().info("Metrics for test saved.")
+            self.get_logger().warning("Metrics for test saved.")
             csvfile_write.close()
             csvfile_read.close()
 
@@ -635,8 +635,12 @@ class MetricsRecorder(Node):
 def main(args=None):
     rclpy.init(args=args)
     metrics_recorder_node = MetricsRecorder()
-    rclpy.spin(metrics_recorder_node)
-    metrics_recorder_node.save_value_csv()
+    try:
+        rclpy.spin(metrics_recorder_node)
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
+        metrics_recorder_node.save_value_csv()
+    finally:
+        rclpy.try_shutdown()
     metrics_recorder_node.destroy_node()
     rclpy.shutdown()
 
