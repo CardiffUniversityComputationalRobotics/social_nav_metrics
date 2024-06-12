@@ -4,6 +4,7 @@ from launch import LaunchDescription
 from launch_ros.substitutions import FindPackageShare
 from launch.actions import DeclareLaunchArgument
 from launch_ros.actions import Node
+from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
@@ -15,17 +16,9 @@ def generate_launch_description():
 
     # ! PARAMETERS
 
-    config_file = LaunchDescription("metrics_config_file")
-
-    config = os.path.join(
-        get_package_share_directory("social_nav_metrics"),
-        "config",
-        "config_example.yaml",
-    )
-
     config_file_param = DeclareLaunchArgument(
         "metrics_config_file",
-        default_value=[social_nav_metrics, "/launch/config_example.yaml"],
+        default_value=[social_nav_metrics, "/config/config_example.yaml"],
         description="Configuration file for metrics recording.",
     )
 
@@ -35,10 +28,7 @@ def generate_launch_description():
         executable="metrics_recorder.py",
         name="metrics_recorder_node",
         output="screen",
-        # parameters=[config],
-        parameters=[
-            "/home/sasm/ros/humble/system/src/social_nav_metrics/config/config_example.yaml"
-        ],
+        parameters=[LaunchConfiguration("metrics_config_file")],
     )
 
     collision_counter_node = Node(
@@ -46,7 +36,7 @@ def generate_launch_description():
         executable="collision_counter",
         name="collision_counter_node",
         output="screen",
-        parameters=[config],
+        parameters=[LaunchConfiguration("metrics_config_file")],
     )
 
     # ! LAUNCH DESCRIPTION DECLARATION
