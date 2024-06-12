@@ -16,7 +16,7 @@ metrics_recorder_node:
     agent_radius: 0.45
 
     # ! measuring characteristics
-    measure_rate: 10
+    measure_rate: 10.0
     sim: True # whether the test is being done in simulation or real experiment
 
     #! saving files config

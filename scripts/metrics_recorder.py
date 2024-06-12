@@ -7,6 +7,7 @@ import time
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
+import rclpy.qos
 from std_msgs.msg import Float32, Int32, Bool
 import numpy as np
 from rosgraph_msgs.msg import Clock
@@ -147,7 +148,7 @@ class MetricsRecorder(Node):
                 ("num_nodes_topic", "/num_nodes"),
                 ("agent_states_topic", "/pedsim_simulator/simulated_agents"),
                 ("collision_counter_topic", "/collision_counter"),
-                ("measure_rate", 5),
+                ("measure_rate", 5.0),
                 ("sim", True),
                 ("csv_dir", ""),
                 ("approach_name", ""),
@@ -187,13 +188,10 @@ class MetricsRecorder(Node):
             .string_value
         )
 
-        print(self.agent_states_topic_)
-
         # ? RATE PARAM
         self.measure_rate_ = (
             self.get_parameter("measure_rate").get_parameter_value().double_value
         )
-        print(self.measure_rate_)
         self.sim = self.get_parameter("sim").get_parameter_value().bool_value
 
         # ? CSV SAVING PARAMS
@@ -259,9 +257,13 @@ class MetricsRecorder(Node):
         # ================================================
         qos_profile = QoSProfile(depth=10)
 
+        clock_qos_profile = QoSProfile(
+            reliability=rclpy.qos.ReliabilityPolicy.BEST_EFFORT, depth=1
+        )
+
         if self.sim:
             self.create_subscription(
-                Clock, self.clock_topic_, self.clock_callback, qos_profile
+                Clock, self.clock_topic_, self.clock_callback, clock_qos_profile
             )
         self.create_subscription(
             Float32, self.cpu_topic_, self.cpu_callback, qos_profile
@@ -391,7 +393,7 @@ class MetricsRecorder(Node):
                 self.robot_position_.pose.orientation.w,
             )
 
-            euler = tf.transformations.euler_from_quaternion(quaternion)
+            euler = euler_from_quaternion(quaternion)
             yaw = euler[2]
 
             if yaw < 0:
@@ -491,7 +493,7 @@ class MetricsRecorder(Node):
             self.past_robot_position_.pose.orientation.w,
         )
 
-        old_angle = tf.transformations.euler_from_quaternion(old_q)[2]
+        old_angle = euler_from_quaternion(old_q)[2]
 
         new_q = (
             self.robot_position_.pose.orientation.x,
@@ -500,7 +502,7 @@ class MetricsRecorder(Node):
             self.robot_position_.pose.orientation.w,
         )
 
-        new_angle = tf.transformations.euler_from_quaternion(new_q)[2]
+        new_angle = euler_from_quaternion(new_q)[2]
 
         angle_change = abs(
             min((2 * math.pi) - abs(old_angle - new_angle), abs(old_angle - new_angle))
@@ -562,6 +564,7 @@ class MetricsRecorder(Node):
 
     def measure_values(self):
         """Manages the time passed and recording of the metrics"""
+
         if self.goal_available_:
             if not self.sim:
                 self.current_time_ = time.time()
@@ -631,10 +634,10 @@ class MetricsRecorder(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    metrics_recorder = MetricsRecorder()
-    rclpy.spin(metrics_recorder)
-    metrics_recorder.save_value_csv()
-    metrics_recorder.destroy_node()
+    metrics_recorder_node = MetricsRecorder()
+    rclpy.spin(metrics_recorder_node)
+    metrics_recorder_node.save_value_csv()
+    metrics_recorder_node.destroy_node()
     rclpy.shutdown()
 
 
