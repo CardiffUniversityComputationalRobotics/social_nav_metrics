@@ -10,7 +10,7 @@ from launch.substitutions import LaunchConfiguration
 def generate_launch_description():
 
     # ! PACKAGES DIR
-    social_nav_metrics = FindPackageShare(package="social_nav_metrics").find(
+    social_nav_metrics_dir = FindPackageShare(package="social_nav_metrics").find(
         "social_nav_metrics"
     )
 
@@ -18,7 +18,7 @@ def generate_launch_description():
 
     config_file_param = DeclareLaunchArgument(
         "metrics_config_file",
-        default_value=[social_nav_metrics, "/config/config_example.yaml"],
+        default_value=[social_nav_metrics_dir, "/config/config_example.yaml"],
         description="Configuration file for metrics recording.",
     )
 
