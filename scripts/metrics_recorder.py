@@ -110,6 +110,9 @@ class MetricsRecorder(Node):
             else:
                 last_data_index = int(last_data[1]) + 1
 
+            if self.total_time_ == 0:
+                self.total_time_ = self.current_time_
+
             writer.writerow(
                 {
                     "test_number": last_data_index,
