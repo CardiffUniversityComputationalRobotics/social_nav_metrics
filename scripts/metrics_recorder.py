@@ -1,140 +1,23 @@
 #!/usr/bin/env python3
 
-import csv
-from datetime import datetime
 import math
 import time
+
+import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
 import rclpy.qos
-from std_msgs.msg import Float32, Int32, Bool
-import numpy as np
-from rosgraph_msgs.msg import Clock
-from pedsim_msgs.msg import AgentStates
 from nav_msgs.msg import Odometry
-from tf_transformations import euler_from_quaternion
-
-
-def import_csv(csvfilename):
-    """Opens and return all content from a CSV in an array"""
-    data = []
-    with open(csvfilename, "r", encoding="utf-8", errors="ignore") as scraped:
-        reader = csv.reader(scraped, delimiter=",")
-        row_index = 0
-        for row in reader:
-            if row:  # avoid blank lines
-                row_index += 1
-                columns = [
-                    str(row_index),
-                    row[0],
-                    row[1],
-                    row[2],
-                    row[3],
-                    row[4],
-                    row[5],
-                    row[6],
-                    row[7],
-                    row[8],
-                    row[9],
-                    row[10],
-                ]
-                data.append(columns)
-        scraped.close()
-    return data
+from pedsim_msgs.msg import AgentStates
+from rosgraph_msgs.msg import Clock
+from metrics import measure_values, save_value_csv
+from std_msgs.msg import Bool, Float32, Int32
 
 
 class MetricsRecorder(Node):
     """This class manages the measurement of the included metrics for social robot navigation
     and saves the metrics on a CSV"""
-
-    def save_value_csv(self):
-        """Saves value of the measured metrics in a new or previously given csv"""
-        self.get_logger().info("About to save test measurements.")
-        fieldnames = [
-            "test_number",
-            "time",
-            "goal_reached",
-            "average_sii",
-            "average_rmi",
-            "total_time",
-            "average_cpu",
-            "collision_counter",
-            "num_nodes",
-            "path_irregularity",
-            "acc_per_segment",
-            "path_length",
-        ]
-
-        # in case num_nodes is not considered, just make it zero
-        if len(self.num_nodes_) == 0:
-            self.num_nodes_ = np.append(self.num_nodes_, 0)
-
-        now = datetime.now()
-        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-
-        last_data = None
-        try:
-            csv_read_data = import_csv(
-                self.csv_dir_ + "/" + self.approach_name_ + "/" + self.csv_name_
-            )
-            last_data = csv_read_data[-1]
-        except OSError:
-            self.get_logger().warning("Could not open the defined CSV file")
-
-        self.get_logger().warning(
-            f"Provided CSV at {self.csv_dir_}/{self.approach_name_}/{self.csv_name_} has been imported."
-        )
-
-        with open(
-            self.csv_dir_ + "/" + self.approach_name_ + "/" + self.csv_name_,
-            "a",
-            newline="",
-            encoding="utf-8",
-        ) as csvfile_write, open(
-            self.csv_dir_ + "/" + self.approach_name_ + "/" + self.csv_name_,
-            "r",
-            encoding="utf-8",
-        ) as csvfile_read:
-            reader = csv.reader(csvfile_read)
-
-            writer = csv.DictWriter(csvfile_write, fieldnames=fieldnames)
-            try:
-                if next(reader) != fieldnames:
-                    writer.writeheader()
-            except:
-                writer.writeheader()
-
-            if last_data is None:
-                last_data_index = 1
-            else:
-                last_data_index = int(last_data[1]) + 1
-
-            if self.total_time_ == 0:
-                self.total_time_ = self.current_time_
-
-            writer.writerow(
-                {
-                    "test_number": last_data_index,
-                    "time": dt_string,
-                    "goal_reached": self.goal_reached_,
-                    "average_sii": round(np.average(self.sii_), 4),
-                    "average_rmi": round(np.average(self.rmi_), 4),
-                    "total_time": round(self.total_time_, 4),
-                    "average_cpu": round(np.average(self.cpu_list_), 4),
-                    "collision_counter": self.collision_counter_,
-                    "num_nodes": int(np.average(self.num_nodes_)),
-                    "path_irregularity": round(np.average(self.path_irregularity_), 4),
-                    "acc_per_segment": round(
-                        np.average(self.acceleration_per_segment_), 4
-                    ),
-                    "path_length": self.path_length_,
-                }
-            )
-
-            self.get_logger().warning("Metrics for test saved.")
-            csvfile_write.close()
-            csvfile_read.close()
 
     def __init__(self):
         super().__init__("metrics_recorder_node")
@@ -293,32 +176,7 @@ class MetricsRecorder(Node):
             qos_profile,
         )
         # ======================================================
-
-        #! LAMBDA FUNCTIONS
-        # ? RELATIVE MOTION INDEX
-        self.rmi_value = (
-            lambda v_r, beta, v_a, alpha, x_agent, y_agent, x_robot, y_robot: (
-                (2 + v_r * np.cos(beta) + v_a * np.cos(alpha))
-                / (
-                    np.sqrt(
-                        math.pow(x_agent - x_robot, 2) + math.pow(y_agent - y_robot, 2)
-                    )
-                )
-            )
-        )
-
-        # ? SOCIAL INDIVIDUAL INDEX
-        self.sii_value = lambda x_agent, y_agent, x_robot, y_robot: (
-            math.pow(
-                math.e,
-                -(
-                    math.pow((x_robot - x_agent) / (self.final_sigma), 2)
-                    + math.pow((y_robot - y_agent) / (self.final_sigma), 2)
-                ),
-            )
-        )
-
-        self.timer = self.create_timer(self.measure_period_, self.measure_values)
+        self.timer = self.create_timer(self.measure_period_, lambda: measure_values(self))
 
     # ! CALLBACKS
     # ===============================================
@@ -366,274 +224,6 @@ class MetricsRecorder(Node):
         """Listens to the states of social agents"""
         self.agent_states_ = agents.agent_states
 
-    # =================================================
-
-    # ! SOCIAL NAVIGATION SPECIFIC METRICS CALCULATIONS FUNCTIONS
-    # =================================================
-    def calculate_rmi(self):
-        """Calculates the relative motion index according to the robot
-        and surrounding social agents."""
-        last_rmi = 0
-
-        for agent in self.agent_states_:
-            v_r = np.sqrt(
-                math.pow(self.robot_velocities_.twist.linear.x, 2)
-                + math.pow(self.robot_velocities_.twist.linear.y, 2)
-            )
-
-            beta = math.atan2(
-                agent.pose.position.y - self.robot_position_.pose.position.y,
-                agent.pose.position.x - self.robot_position_.pose.position.x,
-            )
-
-            if beta < 0:
-                beta = 2 * math.pi + beta
-
-            quaternion = (
-                self.robot_position_.pose.orientation.x,
-                self.robot_position_.pose.orientation.y,
-                self.robot_position_.pose.orientation.z,
-                self.robot_position_.pose.orientation.w,
-            )
-
-            euler = euler_from_quaternion(quaternion)
-            yaw = euler[2]
-
-            if yaw < 0:
-                yaw = 2 * math.pi + yaw
-
-            if beta > (yaw + math.pi):
-                beta = abs(yaw + 2 * math.pi - beta)
-            elif yaw > (beta + math.pi):
-                beta = abs(beta + 2 * math.pi - yaw)
-            else:
-                beta = abs(beta - yaw)
-
-            v_a = np.sqrt(
-                math.pow(agent.twist.linear.x, 2) + math.pow(agent.twist.linear.y, 2)
-            )
-
-            alpha = math.atan2(
-                self.robot_position_.pose.position.y - agent.pose.position.y,
-                self.robot_position_.pose.position.x - agent.pose.position.x,
-            )
-
-            if alpha < 0:
-                alpha = 2 * math.pi + alpha
-
-            quaternion = [
-                agent.pose.orientation.x,
-                agent.pose.orientation.y,
-                agent.pose.orientation.z,
-                agent.pose.orientation.w,
-            ]
-            euler = euler_from_quaternion(quaternion)
-            yaw = euler[2]
-
-            if yaw < 0:
-                yaw = 2 * math.pi + yaw
-
-            if alpha > (yaw + math.pi):
-                alpha = abs(yaw + 2 * math.pi - alpha)
-            elif yaw > (alpha + math.pi):
-                alpha = abs(alpha + 2 * math.pi - yaw)
-            else:
-                alpha = abs(alpha - yaw)
-
-            current_rmi = self.rmi_value(
-                v_r,
-                beta,
-                v_a,
-                alpha,
-                agent.pose.position.x,
-                agent.pose.position.y,
-                self.robot_position_.pose.position.x,
-                self.robot_position_.pose.position.y,
-            )
-
-            if current_rmi > last_rmi:
-                last_rmi = current_rmi
-
-        return last_rmi
-
-    def calculate_sii(self):
-        """Calculates the social individual index according to the robot
-        and surrounding social agents."""
-        last_sii = 0
-        current_sii = 0
-        for agent in self.agent_states_:
-            current_sii = self.sii_value(
-                agent.pose.position.x,
-                agent.pose.position.y,
-                self.robot_position_.pose.position.x,
-                self.robot_position_.pose.position.y,
-            )
-            if current_sii > last_sii:
-                last_sii = current_sii
-
-        return last_sii
-
-    def calculate_path_irregularity(self):
-        """Calculates path irrgularity at an specific time"""
-
-        distance_change = math.sqrt(
-            math.pow(
-                self.past_robot_position_.pose.position.x
-                - self.robot_position_.pose.position.x,
-                2,
-            )
-            + math.pow(
-                self.past_robot_position_.pose.position.y
-                - self.robot_position_.pose.position.y,
-                2,
-            )
-        )
-
-        old_q = (
-            self.past_robot_position_.pose.orientation.x,
-            self.past_robot_position_.pose.orientation.y,
-            self.past_robot_position_.pose.orientation.z,
-            self.past_robot_position_.pose.orientation.w,
-        )
-
-        old_angle = euler_from_quaternion(old_q)[2]
-
-        new_q = (
-            self.robot_position_.pose.orientation.x,
-            self.robot_position_.pose.orientation.y,
-            self.robot_position_.pose.orientation.z,
-            self.robot_position_.pose.orientation.w,
-        )
-
-        new_angle = euler_from_quaternion(new_q)[2]
-
-        angle_change = abs(
-            min((2 * math.pi) - abs(old_angle - new_angle), abs(old_angle - new_angle))
-        )
-
-        if distance_change < 0.001 and angle_change < 0.001:
-            path_irregularity = -1
-        elif distance_change < 0.001:
-            distance_change = 0.001
-            path_irregularity = float(angle_change / distance_change)
-        else:
-            path_irregularity = float(angle_change / distance_change)
-
-        if path_irregularity > 10:
-            path_irregularity = 10
-
-        return path_irregularity
-
-    def calculate_acc_per_segment(self):
-        acceleration_x = (
-            self.past_robot_velocities_.twist.linear.x
-            - self.robot_velocities_.twist.linear.x
-        ) / self.measure_period_
-        acceleration_y = (
-            self.past_robot_velocities_.twist.linear.y
-            - self.robot_velocities_.twist.linear.y
-        ) / self.measure_period_
-
-        res_acceleration = math.sqrt(
-            math.pow(acceleration_x, 2) + math.pow(acceleration_y, 2)
-        )
-
-        distance_change = math.sqrt(
-            math.pow(
-                self.past_robot_position_.pose.position.x
-                - self.robot_position_.pose.position.x,
-                2,
-            )
-            + math.pow(
-                self.past_robot_position_.pose.position.y
-                - self.robot_position_.pose.position.y,
-                2,
-            )
-        )
-
-        self.path_length_ += distance_change
-
-        if distance_change > 0.001:
-            acc_per_segment = float(res_acceleration / distance_change)
-        else:
-            acc_per_segment = -1
-
-        if acc_per_segment > 30:
-            acc_per_segment = 30
-
-        return acc_per_segment
-
-    # ========================================================
-
-    def measure_values(self):
-        """Manages the time passed and recording of the metrics"""
-
-        if self.goal_available_:
-            if not self.sim:
-                self.current_time_ = time.time()
-            if self.current_time_ - self.last_time_ >= self.measure_period_:
-                if self.current_cpu_:
-                    if len(self.current_cpu_) > 1000:
-                        self.current_cpu_ = np.array(
-                            [np.average(self.current_cpu_)], dtype=np.float64
-                        )
-                    self.cpu_list_ = np.append(self.cpu_list_, self.current_cpu_)
-                if self.current_num_nodes_:
-                    if len(self.num_nodes_) > 1000:
-                        self.num_nodes_ = np.array(
-                            [np.average(self.num_nodes_)], dtype=np.float64
-                        )
-                    self.num_nodes_ = np.append(
-                        self.num_nodes_, self.current_num_nodes_
-                    )
-                if (
-                    self.robot_velocities_
-                    and self.robot_position_
-                    and self.agent_states_
-                ):
-                    rmi = self.calculate_rmi()
-                    if len(self.rmi_) > 1000:
-                        self.rmi_ = np.array([np.average(self.rmi_)], dtype=np.float64)
-                    self.rmi_ = np.append(self.rmi_, rmi)
-                    sii = self.calculate_sii()
-                    if len(self.sii_) > 1000:
-                        self.sii_ = np.array([np.average(self.sii_)], dtype=np.float64)
-                    self.sii_ = np.append(self.sii_, sii)
-
-                    if self.past_robot_position_ and self.past_robot_velocities_:
-                        # measure path irregularity
-                        path_irregularity = self.calculate_path_irregularity()
-                        if path_irregularity >= 0:
-                            if len(self.path_irregularity_) > 1000:
-                                self.path_irregularity_ = np.array(
-                                    [np.average(self.path_irregularity_)],
-                                    dtype=np.float64,
-                                )
-                            self.path_irregularity_ = np.append(
-                                self.path_irregularity_, path_irregularity
-                            )
-
-                        # measure aceleration per segment
-                        acc_per_segment = self.calculate_acc_per_segment()
-                        if acc_per_segment >= 0:
-                            if len(self.acceleration_per_segment_) > 1000:
-                                self.acceleration_per_segment_ = np.array(
-                                    [np.average(self.acceleration_per_segment_)],
-                                    dtype=np.float64,
-                                )
-                            self.acceleration_per_segment_ = np.append(
-                                self.acceleration_per_segment_, acc_per_segment
-                            )
-
-                        self.past_robot_position_ = self.robot_position_
-                        self.past_robot_velocities_ = self.robot_velocities_
-
-                    else:
-                        self.past_robot_position_ = self.robot_position_
-                        self.past_robot_velocities_ = self.robot_velocities_
-
-                self.last_time_ = self.current_time_
-
 
 def main(args=None):
     rclpy.init(args=args)
@@ -641,7 +231,7 @@ def main(args=None):
     try:
         rclpy.spin(metrics_recorder_node)
     except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
-        metrics_recorder_node.save_value_csv()
+        save_value_csv(metrics_recorder_node)
     finally:
         rclpy.try_shutdown()
     metrics_recorder_node.destroy_node()
