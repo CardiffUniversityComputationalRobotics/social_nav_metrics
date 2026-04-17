@@ -63,6 +63,7 @@ install(PROGRAMS
 
 install(FILES
   scripts/metrics.py
+  scripts/utils.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

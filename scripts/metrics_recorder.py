@@ -11,8 +11,9 @@ import rclpy.qos
 from nav_msgs.msg import Odometry
 from pedsim_msgs.msg import AgentStates
 from rosgraph_msgs.msg import Clock
-from metrics import measure_values, save_value_csv
+from metrics import measure_values
 from std_msgs.msg import Bool, Float32, Int32
+from utils import save_value_csv
 
 
 class MetricsRecorder(Node):
