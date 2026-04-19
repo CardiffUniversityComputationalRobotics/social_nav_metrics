@@ -218,11 +218,6 @@ def measure_values(recorder):
     if recorder.current_time_ - recorder.last_time_ < recorder.measure_period_:
         return
 
-    if recorder.current_cpu_ is not None:
-        recorder.cpu_list_ = _append_metric_value(
-            recorder.cpu_list_, recorder.current_cpu_
-        )
-
     if recorder.current_num_nodes_ is not None:
         recorder.num_nodes_ = _append_metric_value(
             recorder.num_nodes_, recorder.current_num_nodes_

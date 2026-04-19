@@ -16,13 +16,13 @@ This node is in charge of recording different metrics for social robot navigatio
 
   In case simulation is desired, this is the topic of the time of the simulation in seconds. Commonly the topic `/clock` is used which corresponds to the time given by gazebo.
 
-- cpu_topic (string, default: "/cpu_monitor/planner/cpu")
-
-  Topic where the CPU usage of the used navigation system is published.
-
 - goal_available_topic (string, default: "/goal_available")
 
   Topic where it is stated whether a goal has been set as a query. It is the trigger for this node to start recording the metrics.
+
+- save_metrics_topic (string, default: "/save_metrics")
+
+  Topic where a `True` boolean requests the node to save the current measurements, reset the recorder state, and wait for the next goal before measuring again.
 
 - goal_reached_topic (string, default: "/goal_reached")
 
@@ -72,13 +72,13 @@ The name of the subscribers' topics are just defined as an example, but they may
 
   Time of the test when running simulation.
 
-- /cpu_monitor/planner/cpu ([std_msgs/Float32](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Float32.html))
-
-  CPU consumption of the navigation system.
-
 - /num_nodes ([std_msgs/Int32](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Int32.html))
 
   Number of nodes sampled.
+
+- /save_metrics ([std_msgs/Bool](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Bool.html))
+
+  Saving trigger for the current metrics session. When this topic publishes `True`, the node writes the current metrics to CSV and resets the internal state.
 
 - /goal_available ([std_msgs/Bool](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Bool.html))
 
@@ -191,14 +191,14 @@ Here you are provided with a `launch` file that can be used to deploy the code p
 
 ### Configuration file
 
-The configuration file `config_example.xml` used in the previous presented `launch` file is showed below:
+The configuration file `config_example.yaml` used in the previous presented `launch` file is showed below:
 
 ```yaml
 # !TOPICS
 clock_topic: "/clock"
-cpu_topic: "/cpu_monitor/smf_move_base_planner/cpu"
 goal_reached_topic: "/smf_move_base_planner/goal_reached"
-goal_topic: "/goal_available"
+goal_available_topic: "/goal_available"
+save_metrics_topic: "/save_metrics"
 collision_counter_topic: "/collision_counter"
 num_nodes_topic: "/smf_move_base_planner/smf_num_nodes" # only considered if the approach is sampling based
 agent_states_topic: "/pedsim_simulator/simulated_agents"

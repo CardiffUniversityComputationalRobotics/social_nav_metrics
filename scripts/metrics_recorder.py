@@ -12,7 +12,7 @@ from nav_msgs.msg import Odometry
 from pedsim_msgs.msg import AgentStates
 from rosgraph_msgs.msg import Clock
 from metrics import measure_values
-from std_msgs.msg import Bool, Float32, Int32
+from std_msgs.msg import Bool, Int32
 from utils import save_value_csv
 
 
@@ -28,9 +28,9 @@ class MetricsRecorder(Node):
             namespace="",
             parameters=[
                 ("clock_topic", "/clock"),
-                ("cpu_topic", "/cpu_monitor/planner/cpu"),
                 ("goal_reached_topic", "/goal_reached"),
                 ("goal_available_topic", "/goal_available"),
+                ("save_metrics_topic", "/save_metrics"),
                 ("odom_topic", "/odom"),
                 ("num_nodes_topic", "/num_nodes"),
                 ("agent_states_topic", "/pedsim_simulator/simulated_agents"),
@@ -49,9 +49,6 @@ class MetricsRecorder(Node):
         self.clock_topic_ = (
             self.get_parameter("clock_topic").get_parameter_value().string_value
         )
-        self.cpu_topic_ = (
-            self.get_parameter("cpu_topic").get_parameter_value().string_value
-        )
         self.goal_reached_topic_ = (
             self.get_parameter("goal_reached_topic").get_parameter_value().string_value
         )
@@ -59,6 +56,9 @@ class MetricsRecorder(Node):
             self.get_parameter("goal_available_topic")
             .get_parameter_value()
             .string_value
+        )
+        self.save_metrics_topic_ = (
+            self.get_parameter("save_metrics_topic").get_parameter_value().string_value
         )
         self.odom_topic_ = (
             self.get_parameter("odom_topic").get_parameter_value().string_value
@@ -110,7 +110,6 @@ class MetricsRecorder(Node):
         self.num_nodes_ = np.array([], dtype=np.int32)
         self.collision_counter_ = 0
         self.goal_reached_ = 0
-        self.current_cpu_ = None
         self.current_num_nodes_ = None
 
         self.path_irregularity_ = np.array([], dtype=np.float64)
@@ -136,8 +135,6 @@ class MetricsRecorder(Node):
         self.init_query_time_ = 0.0
         self.current_time_ = 0.0
         self.last_time_ = 0
-
-        self.cpu_list_ = np.array([], dtype=np.float64)
         # ================================================
 
         #! SUBSCRIBERS
@@ -153,9 +150,6 @@ class MetricsRecorder(Node):
                 Clock, self.clock_topic_, self.clock_callback, clock_qos_profile
             )
         self.create_subscription(
-            Float32, self.cpu_topic_, self.cpu_callback, qos_profile
-        )
-        self.create_subscription(
             Int32, self.num_nodes_topic, self.num_nodes_callback, qos_profile
         )
         self.create_subscription(
@@ -163,6 +157,9 @@ class MetricsRecorder(Node):
         )
         self.create_subscription(
             Bool, self.goal_reached_topic_, self.goal_reached_callback, qos_profile
+        )
+        self.create_subscription(
+            Bool, self.save_metrics_topic_, self.save_metrics_callback, qos_profile
         )
         self.create_subscription(
             AgentStates, self.agent_states_topic_, self.agents_callback, qos_profile
@@ -182,31 +179,100 @@ class MetricsRecorder(Node):
     # ! CALLBACKS
     # ===============================================
 
+    def has_metrics_to_save(self):
+        """Return whether there is a completed or active measurement session."""
+        return (
+            self.goal_available_
+            or self.goal_reached_ == 1
+            or self.total_time_ > 0
+            or self.collision_counter_ > 0
+            or self.path_length_ > 0
+            or len(self.rmi_) > 0
+            or len(self.sii_) > 0
+            or len(self.num_nodes_) > 0
+            or len(self.path_irregularity_) > 0
+            or len(self.acceleration_per_segment_) > 0
+        )
+
+    def reset_metrics_state(self):
+        """Reset the recorder after saving so a new goal starts a new session."""
+        self.goal_available_ = False
+        self.goal_reached_ = 0
+        self.collision_counter_ = 0
+        self.total_time_ = 0.0
+        self.init_query_time_ = 0.0
+        self.last_time_ = 0.0
+
+        self.robot_position_ = None
+        self.past_robot_position_ = None
+        self.agent_states_ = None
+        self.robot_velocities_ = None
+        self.past_robot_velocities_ = None
+
+        self.current_num_nodes_ = None
+
+        self.rmi_ = np.array([], dtype=np.float64)
+        self.sii_ = np.array([], dtype=np.float64)
+        self.num_nodes_ = np.array([], dtype=np.int32)
+        self.path_irregularity_ = np.array([], dtype=np.float64)
+        self.acceleration_per_segment_ = np.array([], dtype=np.float64)
+
+        self.orientation_change_ = 0
+        self.path_length_ = 0
+
+    def save_current_metrics(self):
+        """Save the current metrics if there is an active session."""
+        if not self.has_metrics_to_save():
+            self.get_logger().info("No metrics are available to save.")
+            return False
+
+        save_value_csv(self)
+        return True
+
     def goal_callback(self, goal_available: Bool):
         """Receives if the goal for the navigation query is already available."""
-        if self.init_query_time_ == 0:
-            if not self.sim:
-                self.init_query_time_ = time.time()
-            else:
-                self.init_query_time_ = self.current_time_
+        if not goal_available.data or self.goal_available_:
+            return
+
+        if not self.sim:
+            self.init_query_time_ = time.time()
+            self.last_time_ = self.init_query_time_
+        else:
+            self.init_query_time_ = self.current_time_
+            self.last_time_ = self.current_time_
+
         self.goal_available_ = True
+        self.get_logger().info("Goal available received. Starting metrics recording.")
 
     def goal_reached_callback(self, msg: Bool):
         """Receives if the robot has reached or not the goal"""
-        if msg.data:
+        if msg.data and self.goal_available_:
             self.goal_reached_ = 1
             if not self.sim:
                 self.total_time_ = time.time() - self.init_query_time_
             else:
                 self.total_time_ = self.current_time_ - self.init_query_time_
 
+    def save_metrics_callback(self, msg: Bool):
+        """Save the current metrics when requested, then reset the recorder."""
+        if not msg.data:
+            return
+
+        saved_metrics = self.save_current_metrics()
+        self.reset_metrics_state()
+
+        if saved_metrics:
+            self.get_logger().info(
+                "Metrics saved after /save_metrics request. Waiting for a new goal."
+            )
+        else:
+            self.get_logger().info(
+                "Received /save_metrics request with no active metrics. Recorder reset."
+            )
+
     def clock_callback(self, msg: Clock):
         """Listens to the gazebo clock time if simulation is running."""
         self.current_time_ = msg.clock.sec + msg.clock.nanosec / 1e9
-
-    def cpu_callback(self, msg: Float32):
-        """Listens to the CPU power used by the navigation system"""
-        self.current_cpu_ = msg.data
 
     def collision_counter_callback(self, msg: Int32):
         """Listens to the amount of collisions happening by an external node."""
@@ -232,7 +298,7 @@ def main(args=None):
     try:
         rclpy.spin(metrics_recorder_node)
     except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
-        save_value_csv(metrics_recorder_node)
+        metrics_recorder_node.save_current_metrics()
     finally:
         rclpy.try_shutdown()
     metrics_recorder_node.destroy_node()

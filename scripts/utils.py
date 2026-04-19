@@ -11,7 +11,6 @@ CSV_FIELDNAMES = [
     "average_sii",
     "average_rmi",
     "total_time",
-    "average_cpu",
     "collision_counter",
     "num_nodes",
     "path_irregularity",
@@ -29,20 +28,7 @@ def import_csv(csvfilename):
         for row in reader:
             if row:
                 row_index += 1
-                columns = [
-                    str(row_index),
-                    row[0],
-                    row[1],
-                    row[2],
-                    row[3],
-                    row[4],
-                    row[5],
-                    row[6],
-                    row[7],
-                    row[8],
-                    row[9],
-                    row[10],
-                ]
+                columns = [str(row_index), *row]
                 data.append(columns)
     return data
 
@@ -106,7 +92,6 @@ def save_value_csv(recorder):
                 "average_sii": round(_safe_average(recorder.sii_), 4),
                 "average_rmi": round(_safe_average(recorder.rmi_), 4),
                 "total_time": round(recorder.total_time_, 4),
-                "average_cpu": round(_safe_average(recorder.cpu_list_), 4),
                 "collision_counter": recorder.collision_counter_,
                 "num_nodes": int(_safe_average(recorder.num_nodes_)),
                 "path_irregularity": round(
