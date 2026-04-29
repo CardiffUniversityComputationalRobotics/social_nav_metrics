@@ -34,6 +34,8 @@ def import_csv(csvfilename):
 
 
 def _safe_average(values, default=0.0):
+    if hasattr(values, "average"):
+        return values.average(default)
     if len(values) == 0:
         return default
     return float(np.average(values))

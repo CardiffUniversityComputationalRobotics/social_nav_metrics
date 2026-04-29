@@ -3,7 +3,6 @@
 import math
 import time
 
-import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
@@ -11,7 +10,7 @@ import rclpy.qos
 from nav_msgs.msg import Odometry
 from pedsim_msgs.msg import AgentStates
 from rosgraph_msgs.msg import Clock
-from metrics import measure_values
+from metrics import RunningAverage, measure_values
 from std_msgs.msg import Bool, Int32
 from utils import save_value_csv
 
@@ -105,15 +104,15 @@ class MetricsRecorder(Node):
         self.past_robot_velocities_ = None
 
         # SOCIAL NAVIGATION COMMON METRICS
-        self.rmi_ = np.array([], dtype=np.float64)
-        self.sii_ = np.array([], dtype=np.float64)
-        self.num_nodes_ = np.array([], dtype=np.int32)
+        self.rmi_ = RunningAverage()
+        self.sii_ = RunningAverage()
+        self.num_nodes_ = RunningAverage()
         self.collision_counter_ = 0
         self.goal_reached_ = 0
         self.current_num_nodes_ = None
 
-        self.path_irregularity_ = np.array([], dtype=np.float64)
-        self.acceleration_per_segment_ = np.array([], dtype=np.float64)
+        self.path_irregularity_ = RunningAverage()
+        self.acceleration_per_segment_ = RunningAverage()
 
         self.orientation_change_ = 0
         self.path_length_ = 0
@@ -211,11 +210,11 @@ class MetricsRecorder(Node):
 
         self.current_num_nodes_ = None
 
-        self.rmi_ = np.array([], dtype=np.float64)
-        self.sii_ = np.array([], dtype=np.float64)
-        self.num_nodes_ = np.array([], dtype=np.int32)
-        self.path_irregularity_ = np.array([], dtype=np.float64)
-        self.acceleration_per_segment_ = np.array([], dtype=np.float64)
+        self.rmi_ = RunningAverage()
+        self.sii_ = RunningAverage()
+        self.num_nodes_ = RunningAverage()
+        self.path_irregularity_ = RunningAverage()
+        self.acceleration_per_segment_ = RunningAverage()
 
         self.orientation_change_ = 0
         self.path_length_ = 0

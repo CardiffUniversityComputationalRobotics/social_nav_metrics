@@ -1,21 +1,51 @@
 import math
+import sys
 import time
 
 import numpy as np
 from tf_transformations import euler_from_quaternion
 
-MAX_STORED_SAMPLES = 1000
+class RunningAverage:
+    """Track an average without storing samples or an ever-growing sum."""
 
+    __slots__ = ("count", "mean")
 
-def _safe_average(values, default=0.0):
-    if len(values) == 0:
-        return default
-    return float(np.average(values))
+    def __init__(self):
+        self.count = 0
+        self.mean = 0.0
 
+    def __len__(self):
+        return min(self.count, sys.maxsize)
+
+    def add(self, value):
+        value = float(value)
+        if not math.isfinite(value):
+            return
+
+        new_count = self.count + 1
+        try:
+            sample_weight = 1.0 / new_count
+        except OverflowError:
+            self.count = new_count
+            return
+
+        self.mean = math.fsum(
+            (
+                self.mean * (1.0 - sample_weight),
+                value * sample_weight,
+            )
+        )
+        self.count = new_count
+
+    def average(self, default=0.0):
+        if self.count == 0:
+            return default
+        return self.mean
 
 def _append_metric_value(values, value):
-    if len(values) > MAX_STORED_SAMPLES:
-        values = np.array([np.average(values)], dtype=np.float64)
+    if hasattr(values, "add"):
+        values.add(value)
+        return values
     return np.append(values, value)
 
 
