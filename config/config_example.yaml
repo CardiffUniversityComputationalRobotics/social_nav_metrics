@@ -24,7 +24,6 @@ metrics_recorder_node:
     approach_name: "tests"
     csv_name: "new_test.csv"
 
-    max_test_time: 500
 
 collision_counter_node:
   ros__parameters:

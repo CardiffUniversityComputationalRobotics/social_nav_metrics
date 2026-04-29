@@ -221,5 +221,4 @@ csv_dir: "/home/sasm/ros/noetic/system/src/pepper_social_nav_tests/results"
 approach_name: "smf_planner"
 csv_name: "new_test.csv"
 
-max_test_time: 500
 ```
