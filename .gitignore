@@ -9,6 +9,8 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+install/
+log/
 develop-eggs/
 dist/
 downloads/
@@ -160,3 +162,4 @@ cython_debug/
 #.idea/
 
 .vscode/
+.codex

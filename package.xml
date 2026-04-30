@@ -8,6 +8,7 @@
   <license>MIT License</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <build_depend>rclcpp</build_depend>
   <build_depend>rclpy</build_depend>
@@ -24,7 +25,11 @@
 
   <!-- PEDSIM DEPS -->
   <depend>pedsim_msgs</depend>
-
+  <depend>octomap</depend>
+  <depend>octomap_msgs</depend>
+  <depend>octomap_server</depend>
+  <depend>rosgraph_msgs</depend>
+  <depend>tf_transformations</depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 

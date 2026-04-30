@@ -1,225 +1,201 @@
-# Social Robot Navigation metrics recorder
+# Social Robot Navigation Metrics Recorder
 
-This is a package that enables to record metrics for navigation involving people, both in simulation and real life.
+ROS 2 package for recording social navigation metrics in simulation or on a real robot. The package writes one CSV row per navigation run and can optionally count collisions against people and an OctoMap.
 
-This package is compounded of two nodes: `/metrics_recorder_node` and `/collision_counter_node`. The following image shows the topic connections with these nodes:
+The package provides two nodes:
 
-![](https://i.imgur.com/o3xbjtv.png)
+- `metrics_recorder_node`: records metrics from odometry, pedestrian states, goal status, and collision count topics.
+- `collision_counter_node`: counts collision events against social agents and an OctoMap, then publishes the current count.
 
 ## Metrics Recorder Node
 
-This node is in charge of recording different metrics for social robot navigation.
+`metrics_recorder_node` starts measuring when `goal_available_topic` publishes `True`. It saves the current run when `save_metrics_topic` publishes `True`, resets its internal state, and waits for the next goal.
+
+If the node is interrupted with `Ctrl+C`, it also attempts to save the current metrics before shutting down.
 
 ### Parameters
 
-- clock_topic (string, default: "/clock")
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `clock_topic` | string | `/clock` | Simulation clock topic used when `sim` is `True`. |
+| `goal_available_topic` | string | `/goal_available` | A `True` message starts a new metrics recording session. |
+| `save_metrics_topic` | string | `/save_metrics` | A `True` message saves the current session and resets the recorder. |
+| `goal_reached_topic` | string | `/goal_reached` | A `True` message marks the goal as reached and records the final navigation time. |
+| `odom_topic` | string | `/odom` | Robot odometry topic. |
+| `num_nodes_topic` | string | `/num_nodes` | Optional planner node-count topic, useful for sampling-based planners. |
+| `agent_states_topic` | string | `/pedsim_simulator/simulated_agents` | Social agent states topic. |
+| `collision_counter_topic` | string | `/collision_counter` | Collision count topic, normally published by `collision_counter_node`. |
+| `measure_rate` | double | `5.0` | Measurement frequency in Hz. For example, `10.0` records every `0.1` seconds. |
+| `sim` | bool | `True` | If `True`, elapsed time is computed from `/clock`; otherwise wall time is used. |
+| `csv_dir` | string | `""` | Base directory for CSV results. |
+| `approach_name` | string | `""` | Subdirectory inside `csv_dir`, usually the tested planner/approach name. |
+| `csv_name` | string | `""` | CSV file name. |
 
-  In case simulation is desired, this is the topic of the time of the simulation in seconds. Commonly the topic `/clock` is used which corresponds to the time given by gazebo.
+The CSV directory `${csv_dir}/${approach_name}` must exist before saving.
 
-- cpu_topic (string, default: "/cpu_monitor/planner/cpu")
+### Subscribed Topics
 
-  Topic where the CPU usage of the used navigation system is published.
+| Topic | Message Type | Purpose |
+| --- | --- | --- |
+| `/clock` | `rosgraph_msgs/msg/Clock` | Simulation time when `sim` is enabled. |
+| `/goal_available` | `std_msgs/msg/Bool` | Starts recording when `data: true`. |
+| `/goal_reached` | `std_msgs/msg/Bool` | Marks the run as successful when `data: true`. |
+| `/save_metrics` | `std_msgs/msg/Bool` | Saves the current run when `data: true`. |
+| `/odom` | `nav_msgs/msg/Odometry` | Robot pose and velocity. |
+| `/pedsim_simulator/simulated_agents` | `pedsim_msgs/msg/AgentStates` | Agent poses, orientations, and velocities. |
+| `/num_nodes` | `std_msgs/msg/Int32` | Optional number of sampled planner nodes. |
+| `/collision_counter` | `std_msgs/msg/Int32` | Current collision count. |
 
-- goal_available_topic (string, default: "/goal_available")
+### Saved CSV Fields
 
-  Topic where it is stated whether a goal has been set as a query. It is the trigger for this node to start recording the metrics.
+The recorder writes these columns:
 
-- goal_reached_topic (string, default: "/goal_reached")
+```text
+test_number,time,goal_reached,average_sii,average_rmi,total_time,collision_counter,num_nodes,path_irregularity,acc_per_segment,path_length
+```
 
-  Topic where it is stated whether the goal has been reached or not.
-
-- odom_topic (string, default: "/odom")
-
-  Robot odometry. Used in order to calculate some of the social robot navigation metrics.
-
-- num_nodes_topic (string, default "/num_nodes")
-
-  In some cases, for some planning approaches such as sampling based, it may be desired to record the amount of nodes sampled. This topic is used to record that amount of nodes.
-
-- agent_states_topic (string, default: "/pedsim_simulator/simulated_agents")
-
-  Topic where the states of the social agents are obtained.
-
-- collision_counter_topic (string, default: "/collision_counter")
-
-  Topic with the amount of collisions that the robot has encountered.
-
-- measure_rate (double, default: 5)
-
-  Time period in seconds between each measurement and recording.
-
-- sim (bool, default: True)
-
-  Whether the test is done in simulation or real-life. If `True` the time obtained from `clock_topic` is used to calculate the total time passed to complete the query and the period of measurement.
-
-- csv_dir (string)
-
-  The directory where the CSV to be used is located or where the new CSV will be created.
-
-- approach_name (string)
-
-  Name of the tested approach. This is an additional folder inside `csv_dir` with the name of the tested approach.
-
-- csv_name (string)
-
-  Name of the existing or to be created CSV.
-
-### Subscribers
-
-The name of the subscribers' topics are just defined as an example, but they may be configured using the parameters defined before.
-
-- /clock ([rosgraph_msgs/Clock](http://docs.ros.org/en/melodic/api/rosgraph_msgs/html/msg/Clock.html))
-
-  Time of the test when running simulation.
-
-- /cpu_monitor/planner/cpu ([std_msgs/Float32](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Float32.html))
-
-  CPU consumption of the navigation system.
-
-- /num_nodes ([std_msgs/Int32](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Int32.html))
-
-  Number of nodes sampled.
-
-- /goal_available ([std_msgs/Bool](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Bool.html))
-
-  If goal is available.
-
-- /goal_reached ([std_msgs/Bool](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Bool.html))
-
-  If goal has been reached.
-
-- /pedsim_simulator/simulated_agents ([pedsim_msgs/AgentStates](https://github.com/CardiffUniversityComputationalRobotics/pedsim_ros/blob/noetic-devel/pedsim_msgs/msg/AgentStates.msg))
-
-  Position, orientation and velocity of several social agents.
-
-- /odom ([nav_msgs/Odometry](http://docs.ros.org/en/noetic/api/nav_msgs/html/msg/Odometry.html))
-
-  Odometry of the robot for the test.
-
-- /collision_counter ([std_msgs/Int32](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Int32.html))
-
-  Number of collisions the robot had with common obstacles and social agents.
+The averaged metrics use a running average over all valid samples in the run. The recorder does not keep an unbounded array of samples, and it does not compress old samples into an unweighted average.
 
 ## Collision Counter Node
 
-This node is in charge of checking if the robot has collided with surrounding objects and social agents.
+`collision_counter_node` checks whether the robot is colliding with social agents or occupied OctoMap geometry. It increments the counter once per continuous collision event, publishes the current count, and waits until the robot leaves collision before counting another event.
+
+The node requests the OctoMap once at startup. If you do not have an OctoMap service available, run only `metrics_recorder_node` or provide collision counts from another node.
 
 ### Parameters
 
-- robot_height (double)
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `robot_height` | double | `1.0` | Height of the robot collision cylinder. |
+| `robot_radius` | double | `0.25` | Radius of the robot collision cylinder. |
+| `agent_radius` | double | `0.3` | Radius of each agent collision cylinder. |
+| `odom_topic` | string | `/odom` | Robot odometry topic. |
+| `agent_states_topic` | string | `/pedsim_simulator/simulated_agents` | Social agent states topic. |
+| `octomap_service` | string | `/octomap_full` | Service used to retrieve the OctoMap. |
+| `collision_counter_topic` | string | `/collision_counter` | Published collision count topic. |
 
-  Height of the robot considered as a cylinder for collision checking.
+### Interfaces
 
-- robot_radius (double)
+| Interface | Message/Service Type | Direction |
+| --- | --- | --- |
+| `/odom` | `nav_msgs/msg/Odometry` | Subscriber |
+| `/pedsim_simulator/simulated_agents` | `pedsim_msgs/msg/AgentStates` | Subscriber |
+| `/collision_counter` | `std_msgs/msg/Int32` | Publisher |
+| `/octomap_full` | `octomap_msgs/srv/GetOctomap` | Client |
 
-  Radius of the robot considered as a cylinder for collision checking.
+## Build With Colcon
 
-- agent_radius (double)
-
-  Radius of the social agents considered as a cylinder for collision checking.
-
-- odom_topic (string)
-
-  Robot odometry. Used in order to do collision checking.
-
-- agent_states_topic (string)
-
-  Topic where the states of the social agents are obtained.
-
-- collision_counter_topic (string)
-
-  Topic with the amount of collisions that the robot has encountered.
-
-- octomap_service (string)
-
-  Topic where the states of the social agents are obtained.
-
-### Subscribers
-
-The name of the subscribers' topics are just defined as an example, but they may be configured using the parameters defined before.
-
-- /odom ([nav_msgs/Odometry](http://docs.ros.org/en/noetic/api/nav_msgs/html/msg/Odometry.html))
-
-  Odometry of the robot for the test.
-
-- /pedsim_simulator/simulated_agents ([pedsim_msgs/AgentStates](https://github.com/CardiffUniversityComputationalRobotics/pedsim_ros/blob/noetic-devel/pedsim_msgs/msg/AgentStates.msg))
-
-  Position, orientation and velocity of several social agents.
-
-### Publishers
-
-- /collision_counter ([std_msgs/Int32](http://docs.ros.org/en/noetic/api/std_msgs/html/msg/Int32.html))
-
-  Number of collisions that the robot had during one of the tests.
-
-### Services
-
-- octomap_service ([octomap_msgs/GetOctomap](http://docs.ros.org/en/melodic/api/octomap_msgs/html/srv/GetOctomap.html))
-
-  The `collision_counter_node` uses this service in order to obtain the octomap and do collision checking using `fcl`.
-
-## Demo
-
-### Install the package
+Source your ROS 2 installation first. For ROS 2 Humble:
 
 ```bash
-cd catkin_ws/src
+source /opt/ros/humble/setup.bash
+```
+
+Then build the package in a colcon workspace:
+
+```bash
+mkdir -p ~/ros2_ws/src
+cd ~/ros2_ws/src
 git clone https://github.com/CardiffUniversityComputationalRobotics/social_nav_metrics.git
-cd ..
-rosinstall . social_nav_metrics/dependencies.rosinstall
-catkin build
+cd ~/ros2_ws
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install --packages-select social_nav_metrics
+source install/setup.bash
 ```
 
-**Note:** When running `catkin build`, compiling the package may take some time becaude of `fcl` for Noetic.
+You need ROS 2-compatible versions of `pedsim_msgs`, `octomap_msgs`, `octomap_server`, FCL, and `tf_transformations` available through your workspace, underlay, or system packages. This package now uses the ROS 2 colcon workflow instead of the old rosinstall/catkin dependency flow.
 
-### Deploying the nodes
+If colcon warns that `social_nav_metrics` already exists in an underlay and you intentionally want to override it, rebuild with:
 
-Here you are provided with a `launch` file that can be used to deploy the code provided in this repo. Have in mind that it is not mandatory to run the `collision_counter` node. In this case we include it as part as our example using `octomap`, but you may replace it with any other node that counts the collisions for you and publish the number of collisions into the listening topic from the `metrics_recorder_node`.
-
-```xml
-<?xml version="1.0"?>
-<launch>
-    <node pkg="social_nav_metrics" type="metrics_recorder.py" name="metrics_recorder_node" output="screen">
-        <rosparam command="load" file="$(find social_nav_metrics)/config/config_example.yaml"/>
-    </node>
-
-    <node pkg="social_nav_metrics" type="collision_counter" name="collision_counter_node" output="screen">
-        <rosparam command="load" file="$(find social_nav_metrics)/config/config_example.yaml"/>
-    </node>
-</launch>
+```bash
+colcon build --symlink-install --packages-select social_nav_metrics --allow-overriding social_nav_metrics
 ```
 
-### Configuration file
+## Run
 
-The configuration file `config_example.xml` used in the previous presented `launch` file is showed below:
+Launch both nodes with the example configuration:
+
+```bash
+ros2 launch social_nav_metrics metrics_recorder.launch.py
+```
+
+Use a custom parameter file:
+
+```bash
+ros2 launch social_nav_metrics metrics_recorder.launch.py metrics_config_file:=/absolute/path/to/config.yaml
+```
+
+Run only the metrics recorder:
+
+```bash
+ros2 run social_nav_metrics metrics_recorder.py --ros-args --params-file /absolute/path/to/config.yaml
+```
+
+Run only the collision counter:
+
+```bash
+ros2 run social_nav_metrics collision_counter --ros-args --params-file /absolute/path/to/config.yaml
+```
+
+## Example Configuration
+
+ROS 2 parameter files must be grouped by node name under `ros__parameters`:
 
 ```yaml
-# !TOPICS
-clock_topic: "/clock"
-cpu_topic: "/cpu_monitor/smf_move_base_planner/cpu"
-goal_reached_topic: "/smf_move_base_planner/goal_reached"
-goal_topic: "/goal_available"
-collision_counter_topic: "/collision_counter"
-num_nodes_topic: "/smf_move_base_planner/smf_num_nodes" # only considered if the approach is sampling based
-agent_states_topic: "/pedsim_simulator/simulated_agents"
-odom_topic: "/pepper/odom_groundtruth"
+metrics_recorder_node:
+  ros__parameters:
+    clock_topic: "/clock"
+    goal_reached_topic: "/smf_move_base_planner/goal_reached"
+    goal_available_topic: "/goal_available"
+    save_metrics_topic: "/save_metrics"
+    collision_counter_topic: "/collision_counter"
+    num_nodes_topic: "/smf_move_base_planner/smf_num_nodes"
+    agent_states_topic: "/pedsim_simulator/simulated_agents"
+    odom_topic: "/odom"
 
-# octomap service
-octomap_service: /smf_move_base_mapper/get_binary
+    measure_rate: 10.0
+    sim: True
 
-#! robot and agents params
-robot_radius: 0.3
-robot_height: 1.0
-agent_radius: 0.45
+    csv_dir: "/tmp/social_nav_metrics/results"
+    approach_name: "tests"
+    csv_name: "new_test.csv"
 
-# ! measuring characteristics
-measure_rate: 0.5
-sim: True # whether the test is being done in simulation or real experiment
+collision_counter_node:
+  ros__parameters:
+    odom_topic: "/odom"
+    agent_states_topic: "/pedsim_simulator/simulated_agents"
+    collision_counter_topic: "/collision_counter"
+    octomap_service: "/octomap_full"
 
-#! saving files config
-csv_dir: "/home/sasm/ros/noetic/system/src/pepper_social_nav_tests/results"
-approach_name: "smf_planner"
-csv_name: "new_test.csv"
-
-max_test_time: 500
+    robot_radius: 0.3
+    robot_height: 1.0
+    agent_radius: 0.45
 ```
+
+Before saving, create the output folder:
+
+```bash
+mkdir -p /tmp/social_nav_metrics/results/tests
+```
+
+## Recording Workflow
+
+Start a run:
+
+```bash
+ros2 topic pub --once /goal_available std_msgs/msg/Bool "{data: true}"
+```
+
+Mark the goal as reached:
+
+```bash
+ros2 topic pub --once /goal_reached std_msgs/msg/Bool "{data: true}"
+```
+
+Save the current run and reset the recorder:
+
+```bash
+ros2 topic pub --once /save_metrics std_msgs/msg/Bool "{data: true}"
+```
+
+After saving, publish another `goal_available` message to begin the next run.
