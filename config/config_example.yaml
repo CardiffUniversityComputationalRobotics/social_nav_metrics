@@ -10,17 +10,12 @@ metrics_recorder_node:
     agent_states_topic: "/pedsim_simulator/simulated_agents"
     odom_topic: "/odom"
 
-    #! robot and agents params
-    robot_radius: 0.3
-    robot_height: 1.0
-    agent_radius: 0.45
-
     # ! measuring characteristics
     measure_rate: 10.0
     sim: True # whether the test is being done in simulation or real experiment
 
     #! saving files config
-    csv_dir: "/home/sasm/ros/humble/system/src/social_nav_metrics/results"
+    csv_dir: "/tmp/social_nav_metrics/results"
     approach_name: "tests"
     csv_name: "new_test.csv"
 
