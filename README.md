@@ -73,6 +73,7 @@ The node requests the OctoMap once at startup. If you do not have an OctoMap ser
 | `agent_states_topic` | string | `/pedsim_simulator/simulated_agents` | Social agent states topic. |
 | `octomap_service` | string | `/octomap_full` | Service used to retrieve the OctoMap. |
 | `collision_counter_topic` | string | `/collision_counter` | Published collision count topic. |
+| `goal_available_topic` | string | `/goal_available` | Resets the collision counter when a `True` message is received. |
 
 ### Interfaces
 
@@ -80,6 +81,7 @@ The node requests the OctoMap once at startup. If you do not have an OctoMap ser
 | --- | --- | --- |
 | `/odom` | `nav_msgs/msg/Odometry` | Subscriber |
 | `/pedsim_simulator/simulated_agents` | `pedsim_msgs/msg/AgentStates` | Subscriber |
+| `/goal_available` | `std_msgs/msg/Bool` | Subscriber |
 | `/collision_counter` | `std_msgs/msg/Int32` | Publisher |
 | `/octomap_full` | `octomap_msgs/srv/GetOctomap` | Client |
 
@@ -165,6 +167,7 @@ collision_counter_node:
     odom_topic: "/odom"
     agent_states_topic: "/pedsim_simulator/simulated_agents"
     collision_counter_topic: "/collision_counter"
+    goal_available_topic: "/goal_available"
     octomap_service: "/octomap_full"
 
     robot_radius: 0.3

@@ -26,6 +26,7 @@ collision_counter_node:
     odom_topic: "/odom"
     agent_states_topic: "/pedsim_simulator/simulated_agents"
     collision_counter_topic: "/collision_counter"
+    goal_available_topic: "/goal_available"
 
     # octomap service
     octomap_service: /octomap_full

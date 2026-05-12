@@ -2,6 +2,7 @@
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "pedsim_msgs/msg/agent_states.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/int32.hpp"
 #include "octomap_msgs/msg/octomap.hpp"
 #include "octomap_msgs/srv/get_octomap.hpp"
@@ -31,6 +32,7 @@ public:
         this->declare_parameter("agent_states_topic", "/pedsim_simulator/simulated_agents");
         this->declare_parameter("octomap_service", "/octomap_full");
         this->declare_parameter("collision_counter_topic", "/collision_counter");
+        this->declare_parameter("goal_available_topic", "/goal_available");
 
         robot_height_ = this->get_parameter("robot_height").as_double();
         robot_radius_ = this->get_parameter("robot_radius").as_double();
@@ -40,15 +42,19 @@ public:
         std::string agent_states_topic = this->get_parameter("agent_states_topic").as_string();
         std::string octomap_service = this->get_parameter("octomap_service").as_string();
         std::string collision_counter_topic = this->get_parameter("collision_counter_topic").as_string();
+        std::string goal_available_topic = this->get_parameter("goal_available_topic").as_string();
 
         robot_collision_solid_ = std::make_shared<fcl::Cylinder<double>>(robot_radius_, robot_height_);
         agent_collision_solid_ = std::make_shared<fcl::Cylinder<double>>(agent_radius_, 1.5);
 
         collision_counter_ = 0;
+        in_collision_ = false;
 
         odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(odom_topic, 1, std::bind(&CollisionCounterNode::odom_callback, this, _1));
 
         agent_states_subscription_ = this->create_subscription<pedsim_msgs::msg::AgentStates>(agent_states_topic, 1, std::bind(&CollisionCounterNode::agent_states_callback, this, _1));
+
+        goal_available_subscription_ = this->create_subscription<std_msgs::msg::Bool>(goal_available_topic, 1, std::bind(&CollisionCounterNode::goal_available_callback, this, _1));
 
         octomap_client_ = this->create_client<octomap_msgs::srv::GetOctomap>(octomap_service);
 
@@ -100,8 +106,24 @@ private:
         agent_states_ = msg;
     }
 
+    void goal_available_callback(const std_msgs::msg::Bool::SharedPtr msg)
+    {
+        if (!msg->data)
+        {
+            return;
+        }
+
+        collision_counter_ = 0;
+        in_collision_ = false;
+
+        std_msgs::msg::Int32 collision_counter_msg;
+        collision_counter_msg.data = collision_counter_;
+        collision_counter_publisher_->publish(collision_counter_msg);
+    }
+
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
     rclcpp::Subscription<pedsim_msgs::msg::AgentStates>::SharedPtr agent_states_subscription_;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr goal_available_subscription_;
     rclcpp::Client<octomap_msgs::srv::GetOctomap>::SharedPtr octomap_client_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr collision_counter_publisher_;
 
@@ -110,8 +132,8 @@ private:
     std::shared_ptr<fcl::CollisionObjectd> tree_obj_;
 
     double robot_height_, robot_radius_, agent_radius_;
-    bool in_collision_;
-    int collision_counter_ = false;
+    bool in_collision_ = false;
+    int collision_counter_ = 0;
 
     rclcpp::TimerBase::SharedPtr timer_;
 

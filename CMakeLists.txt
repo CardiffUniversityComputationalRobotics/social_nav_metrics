@@ -77,6 +77,7 @@ ament_target_dependencies(collision_counter
   tf2_ros
   nav_msgs
   pedsim_msgs
+  std_msgs
   octomap_msgs
   octomap_server
   ${fcl_LIBRARIES}
