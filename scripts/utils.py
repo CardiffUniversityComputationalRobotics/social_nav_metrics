@@ -1,4 +1,5 @@
 import csv
+import time
 from datetime import datetime
 
 import numpy as np
@@ -84,7 +85,11 @@ def save_value_csv(recorder):
             last_data_index = int(last_data[1]) + 1
 
         if recorder.total_time_ == 0:
-            recorder.total_time_ = recorder.current_time_
+            if not recorder.sim:
+                recorder.current_time_ = time.time()
+            recorder.total_time_ = max(
+                0.0, recorder.current_time_ - recorder.init_query_time_
+            )
 
         writer.writerow(
             {

@@ -134,6 +134,7 @@ class MetricsRecorder(Node):
         self.init_query_time_ = 0.0
         self.current_time_ = 0.0
         self.last_time_ = 0
+        self.past_robot_time_ = None
         # ================================================
 
         #! SUBSCRIBERS
@@ -201,6 +202,7 @@ class MetricsRecorder(Node):
         self.total_time_ = 0.0
         self.init_query_time_ = 0.0
         self.last_time_ = 0.0
+        self.past_robot_time_ = None
 
         self.robot_position_ = None
         self.past_robot_position_ = None

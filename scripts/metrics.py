@@ -198,14 +198,22 @@ def calculate_path_irregularity(recorder):
 
 def calculate_acc_per_segment(recorder):
     """Calculate acceleration per travelled segment."""
+    past_robot_time = getattr(recorder, "past_robot_time_", None)
+    if past_robot_time is None:
+        return -1
+
+    dt = recorder.current_time_ - past_robot_time
+    if dt <= 0:
+        return -1
+
     acceleration_x = (
-        recorder.past_robot_velocities_.twist.linear.x
-        - recorder.robot_velocities_.twist.linear.x
-    ) / recorder.measure_period_
+        recorder.robot_velocities_.twist.linear.x
+        - recorder.past_robot_velocities_.twist.linear.x
+    ) / dt
     acceleration_y = (
-        recorder.past_robot_velocities_.twist.linear.y
-        - recorder.robot_velocities_.twist.linear.y
-    ) / recorder.measure_period_
+        recorder.robot_velocities_.twist.linear.y
+        - recorder.past_robot_velocities_.twist.linear.y
+    ) / dt
 
     res_acceleration = math.sqrt(
         math.pow(acceleration_x, 2) + math.pow(acceleration_y, 2)
@@ -272,5 +280,6 @@ def measure_values(recorder):
 
         recorder.past_robot_position_ = recorder.robot_position_
         recorder.past_robot_velocities_ = recorder.robot_velocities_
+        recorder.past_robot_time_ = recorder.current_time_
 
     recorder.last_time_ = recorder.current_time_
