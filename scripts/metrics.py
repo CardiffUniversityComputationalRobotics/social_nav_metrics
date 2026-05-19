@@ -197,7 +197,7 @@ def calculate_path_irregularity(recorder):
 
 
 def calculate_acc_per_segment(recorder):
-    """Calculate acceleration per travelled segment."""
+    """Calculate linear and angular acceleration per travelled segment."""
     past_robot_time = getattr(recorder, "past_robot_time_", None)
     if past_robot_time is None:
         return -1
@@ -214,9 +214,15 @@ def calculate_acc_per_segment(recorder):
         recorder.robot_velocities_.twist.linear.y
         - recorder.past_robot_velocities_.twist.linear.y
     ) / dt
+    angular_acceleration_z = (
+        recorder.robot_velocities_.twist.angular.z
+        - recorder.past_robot_velocities_.twist.angular.z
+    ) / dt
 
     res_acceleration = math.sqrt(
-        math.pow(acceleration_x, 2) + math.pow(acceleration_y, 2)
+        math.pow(acceleration_x, 2)
+        + math.pow(acceleration_y, 2)
+        + math.pow(angular_acceleration_z, 2)
     )
 
     distance_change = math.sqrt(
