@@ -5,6 +5,10 @@ import time
 import numpy as np
 from tf_transformations import euler_from_quaternion
 
+MIN_SEGMENT_DISTANCE = 0.001
+MIN_ANGLE_CHANGE = 0.001
+MAX_ACC_PER_SEGMENT = 30.0
+
 class RunningAverage:
     """Track an average without storing samples or an ever-growing sum."""
 
@@ -148,21 +152,8 @@ def calculate_sii(recorder):
     return last_sii
 
 
-def calculate_path_irregularity(recorder):
-    """Calculate path irregularity at a specific time."""
-    distance_change = math.sqrt(
-        math.pow(
-            recorder.past_robot_position_.pose.position.x
-            - recorder.robot_position_.pose.position.x,
-            2,
-        )
-        + math.pow(
-            recorder.past_robot_position_.pose.position.y
-            - recorder.robot_position_.pose.position.y,
-            2,
-        )
-    )
-
+def update_path_irregularity(recorder, distance_change):
+    """Accumulate heading changes for the path irregularity metric."""
     old_q = (
         recorder.past_robot_position_.pose.orientation.x,
         recorder.past_robot_position_.pose.orientation.y,
@@ -180,23 +171,16 @@ def calculate_path_irregularity(recorder):
     new_angle = euler_from_quaternion(new_q)[2]
 
     angle_change = abs(
-        min((2 * math.pi) - abs(old_angle - new_angle), abs(old_angle - new_angle))
+        math.atan2(math.sin(new_angle - old_angle), math.cos(new_angle - old_angle))
     )
 
-    if distance_change < 0.001 and angle_change < 0.001:
-        path_irregularity = -1
-    elif distance_change < 0.001:
-        path_irregularity = float(angle_change / 0.001)
-    else:
-        path_irregularity = float(angle_change / distance_change)
+    if distance_change < MIN_SEGMENT_DISTANCE and angle_change < MIN_ANGLE_CHANGE:
+        return
 
-    if path_irregularity > 10:
-        path_irregularity = 10
-
-    return path_irregularity
+    recorder.orientation_change_ += angle_change
 
 
-def calculate_acc_per_segment(recorder):
+def calculate_acc_per_segment(recorder, distance_change):
     """Calculate linear and angular acceleration per travelled segment."""
     past_robot_time = getattr(recorder, "past_robot_time_", None)
     if past_robot_time is None:
@@ -225,28 +209,13 @@ def calculate_acc_per_segment(recorder):
         + math.pow(angular_acceleration_z, 2)
     )
 
-    distance_change = math.sqrt(
-        math.pow(
-            recorder.past_robot_position_.pose.position.x
-            - recorder.robot_position_.pose.position.x,
-            2,
-        )
-        + math.pow(
-            recorder.past_robot_position_.pose.position.y
-            - recorder.robot_position_.pose.position.y,
-            2,
-        )
-    )
-
-    recorder.path_length_ += distance_change
-
-    if distance_change > 0.001:
+    if distance_change > MIN_SEGMENT_DISTANCE:
         acc_per_segment = float(res_acceleration / distance_change)
     else:
         acc_per_segment = -1
 
-    if acc_per_segment > 30:
-        acc_per_segment = 30
+    if acc_per_segment > MAX_ACC_PER_SEGMENT:
+        acc_per_segment = MAX_ACC_PER_SEGMENT
 
     return acc_per_segment
 
@@ -267,24 +236,45 @@ def measure_values(recorder):
             recorder.num_nodes_, recorder.current_num_nodes_
         )
 
-    if recorder.robot_velocities_ and recorder.robot_position_ and recorder.agent_states_:
+    has_robot_position = recorder.robot_position_ is not None
+    has_robot_velocity = recorder.robot_velocities_ is not None
+
+    if has_robot_velocity and has_robot_position and recorder.agent_states_:
         recorder.rmi_ = _append_metric_value(recorder.rmi_, calculate_rmi(recorder))
         recorder.sii_ = _append_metric_value(recorder.sii_, calculate_sii(recorder))
 
-        if recorder.past_robot_position_ and recorder.past_robot_velocities_:
-            path_irregularity = calculate_path_irregularity(recorder)
-            if path_irregularity >= 0:
-                recorder.path_irregularity_ = _append_metric_value(
-                    recorder.path_irregularity_, path_irregularity
-                )
+    if has_robot_position:
+        if recorder.past_robot_position_:
+            dx = (
+                recorder.past_robot_position_.pose.position.x
+                - recorder.robot_position_.pose.position.x
+            )
+            dy = (
+                recorder.past_robot_position_.pose.position.y
+                - recorder.robot_position_.pose.position.y
+            )
+            distance_change = math.hypot(dx, dy)
 
-            acc_per_segment = calculate_acc_per_segment(recorder)
-            if acc_per_segment >= 0:
-                recorder.acceleration_per_segment_ = _append_metric_value(
-                    recorder.acceleration_per_segment_, acc_per_segment
-                )
+            recorder.path_length_ += distance_change
+            update_path_irregularity(recorder, distance_change)
+
+            if has_robot_velocity and recorder.past_robot_velocities_:
+                acc_per_segment = calculate_acc_per_segment(recorder, distance_change)
+                if acc_per_segment >= 0:
+                    recorder.acceleration_per_segment_ = _append_metric_value(
+                        recorder.acceleration_per_segment_, acc_per_segment
+                    )
 
         recorder.past_robot_position_ = recorder.robot_position_
+
+        if has_robot_velocity:
+            recorder.past_robot_velocities_ = recorder.robot_velocities_
+            recorder.past_robot_time_ = recorder.current_time_
+        else:
+            recorder.past_robot_velocities_ = None
+            recorder.past_robot_time_ = None
+
+    elif has_robot_velocity:
         recorder.past_robot_velocities_ = recorder.robot_velocities_
         recorder.past_robot_time_ = recorder.current_time_
 

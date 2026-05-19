@@ -111,7 +111,6 @@ class MetricsRecorder(Node):
         self.goal_reached_ = 0
         self.current_num_nodes_ = None
 
-        self.path_irregularity_ = RunningAverage()
         self.acceleration_per_segment_ = RunningAverage()
 
         self.orientation_change_ = 0
@@ -190,7 +189,6 @@ class MetricsRecorder(Node):
             or len(self.rmi_) > 0
             or len(self.sii_) > 0
             or len(self.num_nodes_) > 0
-            or len(self.path_irregularity_) > 0
             or len(self.acceleration_per_segment_) > 0
         )
 
@@ -215,7 +213,6 @@ class MetricsRecorder(Node):
         self.rmi_ = RunningAverage()
         self.sii_ = RunningAverage()
         self.num_nodes_ = RunningAverage()
-        self.path_irregularity_ = RunningAverage()
         self.acceleration_per_segment_ = RunningAverage()
 
         self.orientation_change_ = 0

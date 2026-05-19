@@ -54,7 +54,7 @@ The recorder writes these columns:
 test_number,time,goal_reached,average_sii,average_rmi,total_time,collision_counter,num_nodes,path_irregularity,acc_per_segment,path_length
 ```
 
-The averaged metrics use a running average over all valid samples in the run. The recorder does not keep an unbounded array of samples, and it does not compress old samples into an unweighted average.
+The sampled metrics use a running average over all valid samples in the run. Path irregularity is saved as total heading change divided by path length. The recorder does not keep an unbounded array of samples, and it does not compress old samples into an unweighted average.
 
 ## Collision Counter Node
 

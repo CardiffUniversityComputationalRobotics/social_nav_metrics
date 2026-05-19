@@ -19,6 +19,8 @@ CSV_FIELDNAMES = [
     "path_length",
 ]
 
+MAX_PATH_IRREGULARITY = 10.0
+
 
 def import_csv(csvfilename):
     """Open and return all content from a CSV in an array."""
@@ -91,6 +93,13 @@ def save_value_csv(recorder):
                 0.0, recorder.current_time_ - recorder.init_query_time_
             )
 
+        path_irregularity = 0.0
+        if recorder.path_length_ > 0:
+            path_irregularity = min(
+                recorder.orientation_change_ / recorder.path_length_,
+                MAX_PATH_IRREGULARITY,
+            )
+
         writer.writerow(
             {
                 "test_number": last_data_index,
@@ -101,9 +110,7 @@ def save_value_csv(recorder):
                 "total_time": round(recorder.total_time_, 4),
                 "collision_counter": recorder.collision_counter_,
                 "num_nodes": int(_safe_average(recorder.num_nodes_)),
-                "path_irregularity": round(
-                    _safe_average(recorder.path_irregularity_), 4
-                ),
+                "path_irregularity": round(path_irregularity, 4),
                 "acc_per_segment": round(
                     _safe_average(recorder.acceleration_per_segment_), 4
                 ),
