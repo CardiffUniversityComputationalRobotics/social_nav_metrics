@@ -7,7 +7,9 @@ from tf_transformations import euler_from_quaternion
 
 MIN_SEGMENT_DISTANCE = 0.001
 MIN_ANGLE_CHANGE = 0.001
+SEI_DENOMINATOR_EPS = 1e-9
 MAX_ACC_PER_SEGMENT = 30.0
+
 
 class RunningAverage:
     """Track an average without storing samples or an ever-growing sum."""
@@ -51,6 +53,17 @@ def _append_metric_value(values, value):
         values.add(value)
         return values
     return np.append(values, value)
+
+
+def _sigmoid(value):
+    if math.isnan(value):
+        return 0.0
+    if value >= 0:
+        z = math.exp(-value)
+        return 1.0 / (1.0 + z)
+
+    z = math.exp(value)
+    return z / (1.0 + z)
 
 
 def _normalize_angle(angle):
@@ -152,6 +165,79 @@ def calculate_sii(recorder):
     return last_sii
 
 
+def calculate_sei(recorder):
+    """Calculate the social effort index for the robot and nearby agents."""
+    if recorder.robot_max_velocity_ <= 0 or recorder.agent_max_velocity_ <= 0:
+        return -1
+
+    robot_speed = math.hypot(
+        recorder.robot_velocities_.twist.linear.x,
+        recorder.robot_velocities_.twist.linear.y,
+    )
+
+    robot_quaternion = (
+        recorder.robot_position_.pose.orientation.x,
+        recorder.robot_position_.pose.orientation.y,
+        recorder.robot_position_.pose.orientation.z,
+        recorder.robot_position_.pose.orientation.w,
+    )
+    robot_yaw = _normalize_angle(euler_from_quaternion(robot_quaternion)[2])
+
+    d_min = max(recorder.robot_radius_ + recorder.agent_radius_, SEI_DENOMINATOR_EPS)
+    total_sei = 0.0
+
+    for agent in recorder.agent_states_:
+        beta = math.atan2(
+            agent.pose.position.y - recorder.robot_position_.pose.position.y,
+            agent.pose.position.x - recorder.robot_position_.pose.position.x,
+        )
+        beta = _relative_angle(_normalize_angle(beta), robot_yaw)
+        robot_velocity_toward_agent = robot_speed * math.cos(beta)
+
+        agent_speed = math.hypot(agent.twist.linear.x, agent.twist.linear.y)
+
+        alpha = math.atan2(
+            recorder.robot_position_.pose.position.y - agent.pose.position.y,
+            recorder.robot_position_.pose.position.x - agent.pose.position.x,
+        )
+
+        agent_quaternion = (
+            agent.pose.orientation.x,
+            agent.pose.orientation.y,
+            agent.pose.orientation.z,
+            agent.pose.orientation.w,
+        )
+        agent_yaw = _normalize_angle(euler_from_quaternion(agent_quaternion)[2])
+        alpha = _relative_angle(_normalize_angle(alpha), agent_yaw)
+        agent_velocity_toward_robot = agent_speed * math.cos(alpha)
+
+        distance = math.hypot(
+            agent.pose.position.x - recorder.robot_position_.pose.position.x,
+            agent.pose.position.y - recorder.robot_position_.pose.position.y,
+        )
+
+        velocity_sum = robot_velocity_toward_agent + agent_velocity_toward_robot
+        denominator = max(math.pow(velocity_sum, 2), SEI_DENOMINATOR_EPS)
+
+        isolation_value = (
+            (robot_velocity_toward_agent - recorder.robot_max_velocity_)
+            * (agent_velocity_toward_robot + recorder.agent_max_velocity_)
+        ) / denominator
+
+        p1 = 2.0 * _sigmoid(isolation_value)
+        p2 = _sigmoid(
+            (10.0 / recorder.agent_max_velocity_)
+            * (robot_velocity_toward_agent - recorder.robot_max_velocity_ / 4.0)
+        )
+        p3 = 1.0 / (distance + d_min)
+
+        current_sei = p1 * p2 * p3
+        if math.isfinite(current_sei):
+            total_sei += current_sei
+
+    return total_sei
+
+
 def update_path_irregularity(recorder, distance_change):
     """Accumulate heading changes for the path irregularity metric."""
     old_q = (
@@ -239,9 +325,14 @@ def measure_values(recorder):
     has_robot_position = recorder.robot_position_ is not None
     has_robot_velocity = recorder.robot_velocities_ is not None
 
-    if has_robot_velocity and has_robot_position and recorder.agent_states_:
-        recorder.rmi_ = _append_metric_value(recorder.rmi_, calculate_rmi(recorder))
-        recorder.sii_ = _append_metric_value(recorder.sii_, calculate_sii(recorder))
+    if has_robot_velocity and has_robot_position and recorder.agent_states_ is not None:
+        sei = calculate_sei(recorder)
+        if sei >= 0:
+            recorder.sei_ = _append_metric_value(recorder.sei_, sei)
+
+        if recorder.agent_states_:
+            recorder.rmi_ = _append_metric_value(recorder.rmi_, calculate_rmi(recorder))
+            recorder.sii_ = _append_metric_value(recorder.sii_, calculate_sii(recorder))
 
     if has_robot_position:
         if recorder.past_robot_position_:

@@ -13,6 +13,10 @@ metrics_recorder_node:
     # ! measuring characteristics
     measure_rate: 10.0
     sim: True # whether the test is being done in simulation or real experiment
+    robot_max_velocity: 1.0
+    agent_max_velocity: 1.0
+    robot_radius: 0.3
+    agent_radius: 0.45
 
     #! saving files config
     csv_dir: "/tmp/social_nav_metrics/results"

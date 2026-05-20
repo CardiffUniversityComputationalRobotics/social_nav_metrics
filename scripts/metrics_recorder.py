@@ -35,6 +35,10 @@ class MetricsRecorder(Node):
                 ("agent_states_topic", "/pedsim_simulator/simulated_agents"),
                 ("collision_counter_topic", "/collision_counter"),
                 ("measure_rate", 5.0),
+                ("robot_max_velocity", 1.0),
+                ("agent_max_velocity", 1.0),
+                ("robot_radius", 0.25),
+                ("agent_radius", 0.3),
                 ("sim", True),
                 ("csv_dir", ""),
                 ("approach_name", ""),
@@ -80,6 +84,20 @@ class MetricsRecorder(Node):
         )
         self.sim = self.get_parameter("sim").get_parameter_value().bool_value
 
+        # ? SEI PARAMS
+        self.robot_max_velocity_ = (
+            self.get_parameter("robot_max_velocity").get_parameter_value().double_value
+        )
+        self.agent_max_velocity_ = (
+            self.get_parameter("agent_max_velocity").get_parameter_value().double_value
+        )
+        self.robot_radius_ = (
+            self.get_parameter("robot_radius").get_parameter_value().double_value
+        )
+        self.agent_radius_ = (
+            self.get_parameter("agent_radius").get_parameter_value().double_value
+        )
+
         # ? CSV SAVING PARAMS
         self.csv_dir_ = self.get_parameter("csv_dir").get_parameter_value().string_value
         self.approach_name_ = (
@@ -106,6 +124,7 @@ class MetricsRecorder(Node):
         # SOCIAL NAVIGATION COMMON METRICS
         self.rmi_ = RunningAverage()
         self.sii_ = RunningAverage()
+        self.sei_ = RunningAverage()
         self.num_nodes_ = RunningAverage()
         self.collision_counter_ = 0
         self.goal_reached_ = 0
@@ -188,6 +207,7 @@ class MetricsRecorder(Node):
             or self.path_length_ > 0
             or len(self.rmi_) > 0
             or len(self.sii_) > 0
+            or len(self.sei_) > 0
             or len(self.num_nodes_) > 0
             or len(self.acceleration_per_segment_) > 0
         )
@@ -212,6 +232,7 @@ class MetricsRecorder(Node):
 
         self.rmi_ = RunningAverage()
         self.sii_ = RunningAverage()
+        self.sei_ = RunningAverage()
         self.num_nodes_ = RunningAverage()
         self.acceleration_per_segment_ = RunningAverage()
 

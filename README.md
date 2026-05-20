@@ -26,6 +26,10 @@ If the node is interrupted with `Ctrl+C`, it also attempts to save the current m
 | `agent_states_topic` | string | `/pedsim_simulator/simulated_agents` | Social agent states topic. |
 | `collision_counter_topic` | string | `/collision_counter` | Collision count topic, normally published by `collision_counter_node`. |
 | `measure_rate` | double | `5.0` | Measurement frequency in Hz. For example, `10.0` records every `0.1` seconds. |
+| `robot_max_velocity` | double | `1.0` | Theoretical maximum robot speed in m/s, used by the Social Effort Index. |
+| `agent_max_velocity` | double | `1.0` | Theoretical maximum person speed in m/s, used by the Social Effort Index. |
+| `robot_radius` | double | `0.25` | Robot radius used by the Social Effort Index minimum distance term. |
+| `agent_radius` | double | `0.3` | Person radius used by the Social Effort Index minimum distance term. |
 | `sim` | bool | `True` | If `True`, elapsed time is computed from `/clock`; otherwise wall time is used. |
 | `csv_dir` | string | `""` | Base directory for CSV results. |
 | `approach_name` | string | `""` | Subdirectory inside `csv_dir`, usually the tested planner/approach name. |
@@ -51,10 +55,10 @@ The CSV directory `${csv_dir}/${approach_name}` must exist before saving.
 The recorder writes these columns:
 
 ```text
-test_number,time,goal_reached,average_sii,average_rmi,total_time,collision_counter,num_nodes,path_irregularity,acc_per_segment,path_length
+test_number,time,goal_reached,average_sii,average_rmi,average_sei,total_time,collision_counter,num_nodes,path_irregularity,acc_per_segment,path_length
 ```
 
-The sampled metrics use a running average over all valid samples in the run. Path irregularity is saved as total heading change divided by path length. The recorder does not keep an unbounded array of samples, and it does not compress old samples into an unweighted average.
+The sampled metrics use a running average over all valid samples in the run. Social Effort Index samples are summed over all people at each measurement tick before averaging over the run. Path irregularity is saved as total heading change divided by path length. The recorder does not keep an unbounded array of samples, and it does not compress old samples into an unweighted average.
 
 ## Collision Counter Node
 
@@ -157,6 +161,10 @@ metrics_recorder_node:
 
     measure_rate: 10.0
     sim: True
+    robot_max_velocity: 1.0
+    agent_max_velocity: 1.0
+    robot_radius: 0.3
+    agent_radius: 0.45
 
     csv_dir: "/tmp/social_nav_metrics/results"
     approach_name: "tests"
