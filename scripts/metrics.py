@@ -8,6 +8,8 @@ from tf_transformations import euler_from_quaternion
 MIN_SEGMENT_DISTANCE = 0.001
 MIN_ANGLE_CHANGE = 0.001
 SEI_DENOMINATOR_EPS = 1e-9
+TTC_MAX = 10.0
+TTC_EPS = 1e-9
 MAX_ACC_PER_SEGMENT = 30.0
 
 
@@ -238,6 +240,82 @@ def calculate_sei(recorder):
     return total_sei
 
 
+def calculate_ttc(recorder):
+    """Calculate the minimum time-to-collision against nearby agents."""
+    if recorder.agent_states_ is None:
+        return -1
+
+    if not recorder.agent_states_:
+        return TTC_MAX
+
+    robot_speed = math.hypot(
+        recorder.robot_velocities_.twist.linear.x,
+        recorder.robot_velocities_.twist.linear.y,
+    )
+
+    robot_quaternion = (
+        recorder.robot_position_.pose.orientation.x,
+        recorder.robot_position_.pose.orientation.y,
+        recorder.robot_position_.pose.orientation.z,
+        recorder.robot_position_.pose.orientation.w,
+    )
+    robot_yaw = euler_from_quaternion(robot_quaternion)[2]
+    robot_vx = robot_speed * math.cos(robot_yaw)
+    robot_vy = robot_speed * math.sin(robot_yaw)
+
+    collision_radius = max(
+        recorder.robot_radius_ + recorder.agent_radius_,
+        TTC_EPS,
+    )
+    min_ttc = TTC_MAX
+
+    for agent in recorder.agent_states_:
+        agent_speed = math.hypot(agent.twist.linear.x, agent.twist.linear.y)
+
+        agent_quaternion = (
+            agent.pose.orientation.x,
+            agent.pose.orientation.y,
+            agent.pose.orientation.z,
+            agent.pose.orientation.w,
+        )
+        agent_yaw = euler_from_quaternion(agent_quaternion)[2]
+        agent_vx = agent_speed * math.cos(agent_yaw)
+        agent_vy = agent_speed * math.sin(agent_yaw)
+
+        px = agent.pose.position.x - recorder.robot_position_.pose.position.x
+        py = agent.pose.position.y - recorder.robot_position_.pose.position.y
+        vx = agent_vx - robot_vx
+        vy = agent_vy - robot_vy
+
+        a = vx * vx + vy * vy
+        b = 2.0 * (px * vx + py * vy)
+        c = px * px + py * py - collision_radius * collision_radius
+
+        if c <= 0.0:
+            current_ttc = 0.0
+        elif a < TTC_EPS:
+            current_ttc = TTC_MAX
+        else:
+            discriminant = b * b - 4.0 * a * c
+            if discriminant < 0.0:
+                current_ttc = TTC_MAX
+            else:
+                sqrt_discriminant = math.sqrt(discriminant)
+                t1 = (-b - sqrt_discriminant) / (2.0 * a)
+                t2 = (-b + sqrt_discriminant) / (2.0 * a)
+                future_times = [
+                    collision_time
+                    for collision_time in (t1, t2)
+                    if collision_time >= 0.0
+                ]
+                current_ttc = min(future_times) if future_times else TTC_MAX
+
+        if math.isfinite(current_ttc):
+            min_ttc = min(min_ttc, current_ttc, TTC_MAX)
+
+    return min_ttc
+
+
 def update_path_irregularity(recorder, distance_change):
     """Accumulate heading changes for the path irregularity metric."""
     old_q = (
@@ -329,6 +407,10 @@ def measure_values(recorder):
         sei = calculate_sei(recorder)
         if sei >= 0:
             recorder.sei_ = _append_metric_value(recorder.sei_, sei)
+
+        ttc = calculate_ttc(recorder)
+        if ttc >= 0:
+            recorder.ttc_ = _append_metric_value(recorder.ttc_, ttc)
 
         if recorder.agent_states_:
             recorder.rmi_ = _append_metric_value(recorder.rmi_, calculate_rmi(recorder))

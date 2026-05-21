@@ -125,6 +125,7 @@ class MetricsRecorder(Node):
         self.rmi_ = RunningAverage()
         self.sii_ = RunningAverage()
         self.sei_ = RunningAverage()
+        self.ttc_ = RunningAverage()
         self.num_nodes_ = RunningAverage()
         self.collision_counter_ = 0
         self.goal_reached_ = 0
@@ -208,6 +209,7 @@ class MetricsRecorder(Node):
             or len(self.rmi_) > 0
             or len(self.sii_) > 0
             or len(self.sei_) > 0
+            or len(self.ttc_) > 0
             or len(self.num_nodes_) > 0
             or len(self.acceleration_per_segment_) > 0
         )
@@ -233,6 +235,7 @@ class MetricsRecorder(Node):
         self.rmi_ = RunningAverage()
         self.sii_ = RunningAverage()
         self.sei_ = RunningAverage()
+        self.ttc_ = RunningAverage()
         self.num_nodes_ = RunningAverage()
         self.acceleration_per_segment_ = RunningAverage()
 
