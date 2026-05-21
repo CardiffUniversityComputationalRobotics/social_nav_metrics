@@ -131,7 +131,8 @@ class MetricsRecorder(Node):
         self.goal_reached_ = 0
         self.current_num_nodes_ = None
 
-        self.acceleration_per_segment_ = RunningAverage()
+        self.linear_acceleration_per_segment_ = RunningAverage()
+        self.angular_acceleration_per_segment_ = RunningAverage()
 
         self.orientation_change_ = 0
         self.in_place_rotation_ = 0
@@ -213,7 +214,8 @@ class MetricsRecorder(Node):
             or len(self.sei_) > 0
             or len(self.ttc_) > 0
             or len(self.num_nodes_) > 0
-            or len(self.acceleration_per_segment_) > 0
+            or len(self.linear_acceleration_per_segment_) > 0
+            or len(self.angular_acceleration_per_segment_) > 0
         )
 
     def reset_metrics_state(self):
@@ -239,7 +241,8 @@ class MetricsRecorder(Node):
         self.sei_ = RunningAverage()
         self.ttc_ = RunningAverage()
         self.num_nodes_ = RunningAverage()
-        self.acceleration_per_segment_ = RunningAverage()
+        self.linear_acceleration_per_segment_ = RunningAverage()
+        self.angular_acceleration_per_segment_ = RunningAverage()
 
         self.orientation_change_ = 0
         self.in_place_rotation_ = 0

@@ -18,7 +18,8 @@ CSV_FIELDNAMES = [
     "num_nodes",
     "path_irregularity",
     "in_place_rotation",
-    "acc_per_segment",
+    "linear_acc_per_segment",
+    "angular_acc_per_segment",
     "path_length",
 ]
 
@@ -117,8 +118,11 @@ def save_value_csv(recorder):
                 "num_nodes": int(_safe_average(recorder.num_nodes_)),
                 "path_irregularity": round(path_irregularity, 4),
                 "in_place_rotation": round(recorder.in_place_rotation_, 4),
-                "acc_per_segment": round(
-                    _safe_average(recorder.acceleration_per_segment_), 4
+                "linear_acc_per_segment": round(
+                    _safe_average(recorder.linear_acceleration_per_segment_), 4
+                ),
+                "angular_acc_per_segment": round(
+                    _safe_average(recorder.angular_acceleration_per_segment_), 4
                 ),
                 "path_length": recorder.path_length_,
             }

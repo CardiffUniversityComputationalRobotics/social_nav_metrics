@@ -351,11 +351,11 @@ def calculate_acc_per_segment(recorder, distance_change):
     """Calculate linear and angular acceleration per travelled segment."""
     past_robot_time = getattr(recorder, "past_robot_time_", None)
     if past_robot_time is None:
-        return -1
+        return -1, -1
 
     dt = recorder.current_time_ - past_robot_time
     if dt <= 0:
-        return -1
+        return -1, -1
 
     acceleration_x = (
         recorder.robot_velocities_.twist.linear.x
@@ -370,21 +370,20 @@ def calculate_acc_per_segment(recorder, distance_change):
         - recorder.past_robot_velocities_.twist.angular.z
     ) / dt
 
-    res_acceleration = math.sqrt(
-        math.pow(acceleration_x, 2)
-        + math.pow(acceleration_y, 2)
-        + math.pow(angular_acceleration_z, 2)
-    )
+    if distance_change <= MIN_SEGMENT_DISTANCE:
+        return -1, -1
 
-    if distance_change > MIN_SEGMENT_DISTANCE:
-        acc_per_segment = float(res_acceleration / distance_change)
-    else:
-        acc_per_segment = -1
+    linear_acceleration = math.hypot(acceleration_x, acceleration_y)
+    linear_acc_per_segment = linear_acceleration / distance_change
+    angular_acc_per_segment = abs(angular_acceleration_z) / distance_change
 
-    if acc_per_segment > MAX_ACC_PER_SEGMENT:
-        acc_per_segment = MAX_ACC_PER_SEGMENT
+    if linear_acc_per_segment > MAX_ACC_PER_SEGMENT:
+        linear_acc_per_segment = MAX_ACC_PER_SEGMENT
 
-    return acc_per_segment
+    if angular_acc_per_segment > MAX_ACC_PER_SEGMENT:
+        angular_acc_per_segment = MAX_ACC_PER_SEGMENT
+
+    return linear_acc_per_segment, angular_acc_per_segment
 
 
 def measure_values(recorder):
@@ -435,10 +434,18 @@ def measure_values(recorder):
             update_path_irregularity(recorder, distance_change)
 
             if has_robot_velocity and recorder.past_robot_velocities_:
-                acc_per_segment = calculate_acc_per_segment(recorder, distance_change)
-                if acc_per_segment >= 0:
-                    recorder.acceleration_per_segment_ = _append_metric_value(
-                        recorder.acceleration_per_segment_, acc_per_segment
+                linear_acc_per_segment, angular_acc_per_segment = (
+                    calculate_acc_per_segment(recorder, distance_change)
+                )
+                if linear_acc_per_segment >= 0:
+                    recorder.linear_acceleration_per_segment_ = _append_metric_value(
+                        recorder.linear_acceleration_per_segment_,
+                        linear_acc_per_segment,
+                    )
+                if angular_acc_per_segment >= 0:
+                    recorder.angular_acceleration_per_segment_ = _append_metric_value(
+                        recorder.angular_acceleration_per_segment_,
+                        angular_acc_per_segment,
                     )
 
         recorder.past_robot_position_ = recorder.robot_position_

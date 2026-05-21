@@ -55,10 +55,10 @@ The CSV directory `${csv_dir}/${approach_name}` must exist before saving.
 The recorder writes these columns:
 
 ```text
-test_number,time,goal_reached,average_sii,average_rmi,average_sei,average_ttc,total_time,collision_counter,num_nodes,path_irregularity,in_place_rotation,acc_per_segment,path_length
+test_number,time,goal_reached,average_sii,average_rmi,average_sei,average_ttc,total_time,collision_counter,num_nodes,path_irregularity,in_place_rotation,linear_acc_per_segment,angular_acc_per_segment,path_length
 ```
 
-The sampled metrics use a running average over all valid samples in the run. Social Effort Index samples are summed over all people at each measurement tick before averaging over the run. Time-to-Collision samples use the minimum robot-person collision time at each tick and saturate at 10 seconds. Path irregularity is saved as total heading change divided by path length. In-place rotation is saved as total yaw change, in radians, while the robot is rotating with almost no translation. The recorder does not keep an unbounded array of samples, and it does not compress old samples into an unweighted average.
+The sampled metrics use a running average over all valid samples in the run. Social Effort Index samples are summed over all people at each measurement tick before averaging over the run. Time-to-Collision samples use the minimum robot-person collision time at each tick and saturate at 10 seconds. Path irregularity is saved as total heading change divided by path length. In-place rotation is saved as total yaw change, in radians, while the robot is rotating with almost no translation. Linear and angular acceleration per segment are saved separately to avoid mixing translational and rotational units. The recorder does not keep an unbounded array of samples, and it does not compress old samples into an unweighted average.
 
 ## Collision Counter Node
 
