@@ -134,6 +134,7 @@ class MetricsRecorder(Node):
         self.acceleration_per_segment_ = RunningAverage()
 
         self.orientation_change_ = 0
+        self.in_place_rotation_ = 0
         self.path_length_ = 0
 
         # ! SII VARIABLES
@@ -206,6 +207,7 @@ class MetricsRecorder(Node):
             or self.total_time_ > 0
             or self.collision_counter_ > 0
             or self.path_length_ > 0
+            or self.in_place_rotation_ > 0
             or len(self.rmi_) > 0
             or len(self.sii_) > 0
             or len(self.sei_) > 0
@@ -240,6 +242,7 @@ class MetricsRecorder(Node):
         self.acceleration_per_segment_ = RunningAverage()
 
         self.orientation_change_ = 0
+        self.in_place_rotation_ = 0
         self.path_length_ = 0
 
     def save_current_metrics(self):

@@ -8,7 +8,7 @@ from tf_transformations import euler_from_quaternion
 MIN_SEGMENT_DISTANCE = 0.001
 MIN_ANGLE_CHANGE = 0.001
 SEI_DENOMINATOR_EPS = 1e-9
-TTC_MAX = 10.0
+TTC_MAX = 5.0
 TTC_EPS = 1e-9
 MAX_ACC_PER_SEGMENT = 30.0
 
@@ -340,6 +340,9 @@ def update_path_irregularity(recorder, distance_change):
 
     if distance_change < MIN_SEGMENT_DISTANCE and angle_change < MIN_ANGLE_CHANGE:
         return
+
+    if distance_change < MIN_SEGMENT_DISTANCE:
+        recorder.in_place_rotation_ += angle_change
 
     recorder.orientation_change_ += angle_change
 
