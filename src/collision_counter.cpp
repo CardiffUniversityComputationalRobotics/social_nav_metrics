@@ -31,7 +31,8 @@ public:
         this->declare_parameter("odom_topic", "/odom");
         this->declare_parameter("agent_states_topic", "/pedsim_simulator/simulated_agents");
         this->declare_parameter("octomap_service", "/octomap_full");
-        this->declare_parameter("collision_counter_topic", "/collision_counter");
+        this->declare_parameter("people_collision_counter_topic", "/people_collision_counter");
+        this->declare_parameter("object_collision_counter_topic", "/object_collision_counter");
         this->declare_parameter("goal_available_topic", "/goal_available");
 
         robot_height_ = this->get_parameter("robot_height").as_double();
@@ -41,14 +42,17 @@ public:
         std::string odom_topic = this->get_parameter("odom_topic").as_string();
         std::string agent_states_topic = this->get_parameter("agent_states_topic").as_string();
         std::string octomap_service = this->get_parameter("octomap_service").as_string();
-        std::string collision_counter_topic = this->get_parameter("collision_counter_topic").as_string();
+        std::string people_collision_counter_topic = this->get_parameter("people_collision_counter_topic").as_string();
+        std::string object_collision_counter_topic = this->get_parameter("object_collision_counter_topic").as_string();
         std::string goal_available_topic = this->get_parameter("goal_available_topic").as_string();
 
         robot_collision_solid_ = std::make_shared<fcl::Cylinder<double>>(robot_radius_, robot_height_);
         agent_collision_solid_ = std::make_shared<fcl::Cylinder<double>>(agent_radius_, 1.5);
 
-        collision_counter_ = 0;
-        in_collision_ = false;
+        people_collision_counter_ = 0;
+        object_collision_counter_ = 0;
+        in_people_collision_ = false;
+        in_object_collision_ = false;
 
         odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(odom_topic, 1, std::bind(&CollisionCounterNode::odom_callback, this, _1));
 
@@ -58,7 +62,8 @@ public:
 
         octomap_client_ = this->create_client<octomap_msgs::srv::GetOctomap>(octomap_service);
 
-        collision_counter_publisher_ = this->create_publisher<std_msgs::msg::Int32>(collision_counter_topic, 1);
+        people_collision_counter_publisher_ = this->create_publisher<std_msgs::msg::Int32>(people_collision_counter_topic, 1);
+        object_collision_counter_publisher_ = this->create_publisher<std_msgs::msg::Int32>(object_collision_counter_topic, 1);
 
         // Check if the service is available
         if (!octomap_client_->wait_for_service(10s))
@@ -113,27 +118,36 @@ private:
             return;
         }
 
-        collision_counter_ = 0;
-        in_collision_ = false;
+        people_collision_counter_ = 0;
+        object_collision_counter_ = 0;
+        in_people_collision_ = false;
+        in_object_collision_ = false;
 
-        std_msgs::msg::Int32 collision_counter_msg;
-        collision_counter_msg.data = collision_counter_;
-        collision_counter_publisher_->publish(collision_counter_msg);
+        std_msgs::msg::Int32 people_collision_counter_msg;
+        people_collision_counter_msg.data = people_collision_counter_;
+        people_collision_counter_publisher_->publish(people_collision_counter_msg);
+
+        std_msgs::msg::Int32 object_collision_counter_msg;
+        object_collision_counter_msg.data = object_collision_counter_;
+        object_collision_counter_publisher_->publish(object_collision_counter_msg);
     }
 
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
     rclcpp::Subscription<pedsim_msgs::msg::AgentStates>::SharedPtr agent_states_subscription_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr goal_available_subscription_;
     rclcpp::Client<octomap_msgs::srv::GetOctomap>::SharedPtr octomap_client_;
-    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr collision_counter_publisher_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr people_collision_counter_publisher_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr object_collision_counter_publisher_;
 
     std::shared_ptr<fcl::Cylinder<double>> robot_collision_solid_, agent_collision_solid_;
 
     std::shared_ptr<fcl::CollisionObjectd> tree_obj_;
 
     double robot_height_, robot_radius_, agent_radius_;
-    bool in_collision_ = false;
-    int collision_counter_ = 0;
+    bool in_people_collision_ = false;
+    bool in_object_collision_ = false;
+    int people_collision_counter_ = 0;
+    int object_collision_counter_ = 0;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
@@ -179,25 +193,47 @@ void CollisionCounterNode::timer_callback()
                 }
             }
 
-            if (!in_collision_)
+            bool found_object_collision = collision_result_octomap.isCollision();
+
+            if (!in_object_collision_)
             {
-                if (collision_result_octomap.isCollision() || found_collision)
+                if (found_object_collision)
                 {
-                    collision_counter_++;
-                    in_collision_ = true;
+                    object_collision_counter_++;
+                    in_object_collision_ = true;
                 }
             }
             else
             {
-                if (!collision_result_octomap.isCollision() && !found_collision)
+                if (!found_object_collision)
                 {
-                    in_collision_ = false;
+                    in_object_collision_ = false;
                 }
             }
 
-            std_msgs::msg::Int32 collision_counter_msg;
-            collision_counter_msg.data = collision_counter_;
-            collision_counter_publisher_->publish(collision_counter_msg);
+            if (!in_people_collision_)
+            {
+                if (found_collision)
+                {
+                    people_collision_counter_++;
+                    in_people_collision_ = true;
+                }
+            }
+            else
+            {
+                if (!found_collision)
+                {
+                    in_people_collision_ = false;
+                }
+            }
+
+            std_msgs::msg::Int32 people_collision_counter_msg;
+            people_collision_counter_msg.data = people_collision_counter_;
+            people_collision_counter_publisher_->publish(people_collision_counter_msg);
+
+            std_msgs::msg::Int32 object_collision_counter_msg;
+            object_collision_counter_msg.data = object_collision_counter_;
+            object_collision_counter_publisher_->publish(object_collision_counter_msg);
         }
         rclcpp::spin_some(this->get_node_base_interface());
     }

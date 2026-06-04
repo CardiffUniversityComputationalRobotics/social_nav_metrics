@@ -1,11 +1,11 @@
 # Social Robot Navigation Metrics Recorder
 
-ROS 2 package for recording social navigation metrics in simulation or on a real robot. The package writes one CSV row per navigation run and can optionally count collisions against people and an OctoMap.
+ROS 2 package for recording social navigation metrics in simulation or on a real robot. The package writes one CSV row per navigation run and can optionally count collisions against people and an OctoMap separately.
 
 The package provides two nodes:
 
 - `metrics_recorder_node`: records metrics from odometry, pedestrian states, goal status, and collision count topics.
-- `collision_counter_node`: counts collision events against social agents and an OctoMap, then publishes the current count.
+- `collision_counter_node`: counts collision events against social agents and an OctoMap, then publishes separate people and object collision counts.
 
 ## Metrics Recorder Node
 
@@ -24,7 +24,8 @@ If the node is interrupted with `Ctrl+C`, it also attempts to save the current m
 | `odom_topic` | string | `/odom` | Robot odometry topic. |
 | `num_nodes_topic` | string | `/num_nodes` | Optional planner node-count topic, useful for sampling-based planners. |
 | `agent_states_topic` | string | `/pedsim_simulator/simulated_agents` | Social agent states topic. |
-| `collision_counter_topic` | string | `/collision_counter` | Collision count topic, normally published by `collision_counter_node`. |
+| `people_collision_counter_topic` | string | `/people_collision_counter` | People collision count topic, normally published by `collision_counter_node`. |
+| `object_collision_counter_topic` | string | `/object_collision_counter` | Object collision count topic, normally published by `collision_counter_node`. |
 | `measure_rate` | double | `5.0` | Measurement frequency in Hz. For example, `10.0` records every `0.1` seconds. |
 | `robot_max_velocity` | double | `1.0` | Theoretical maximum robot speed in m/s, used by the Social Effort Index. |
 | `agent_max_velocity` | double | `1.0` | Theoretical maximum person speed in m/s, used by the Social Effort Index. |
@@ -48,21 +49,22 @@ The CSV directory `${csv_dir}/${approach_name}` must exist before saving.
 | `/odom` | `nav_msgs/msg/Odometry` | Robot pose and velocity. |
 | `/pedsim_simulator/simulated_agents` | `pedsim_msgs/msg/AgentStates` | Agent poses, orientations, and velocities. |
 | `/num_nodes` | `std_msgs/msg/Int32` | Optional number of sampled planner nodes. |
-| `/collision_counter` | `std_msgs/msg/Int32` | Current collision count. |
+| `/people_collision_counter` | `std_msgs/msg/Int32` | Current people collision count. |
+| `/object_collision_counter` | `std_msgs/msg/Int32` | Current object collision count. |
 
 ### Saved CSV Fields
 
 The recorder writes these columns:
 
 ```text
-test_number,time,goal_reached,average_sii,average_rmi,average_sei,average_ttc,total_time,collision_counter,num_nodes,path_irregularity,in_place_rotation,linear_acc_per_segment,angular_acc_per_segment,path_length
+test_number,time,goal_reached,average_sii,average_rmi,average_sei,average_ttc,total_time,people_collision_counter,object_collision_counter,num_nodes,path_irregularity,in_place_rotation,linear_acc_per_segment,angular_acc_per_segment,path_length
 ```
 
 The sampled metrics use a running average over all valid samples in the run. Social Effort Index samples are summed over all people at each measurement tick before averaging over the run. Time-to-Collision samples use the minimum robot-person collision time at each tick and saturate at 10 seconds. Path irregularity is saved as total heading change divided by path length. In-place rotation is saved as total yaw change, in radians, while the robot is rotating with almost no translation. Linear and angular acceleration per segment are saved separately to avoid mixing translational and rotational units. The recorder does not keep an unbounded array of samples, and it does not compress old samples into an unweighted average.
 
 ## Collision Counter Node
 
-`collision_counter_node` checks whether the robot is colliding with social agents or occupied OctoMap geometry. It increments the counter once per continuous collision event, publishes the current count, and waits until the robot leaves collision before counting another event.
+`collision_counter_node` checks whether the robot is colliding with social agents or occupied OctoMap geometry. It increments people and object counters independently once per continuous collision event, publishes both current counts, and waits until the robot leaves that collision type before counting another event of the same type.
 
 The node requests the OctoMap once at startup. If you do not have an OctoMap service available, run only `metrics_recorder_node` or provide collision counts from another node.
 
@@ -76,7 +78,8 @@ The node requests the OctoMap once at startup. If you do not have an OctoMap ser
 | `odom_topic` | string | `/odom` | Robot odometry topic. |
 | `agent_states_topic` | string | `/pedsim_simulator/simulated_agents` | Social agent states topic. |
 | `octomap_service` | string | `/octomap_full` | Service used to retrieve the OctoMap. |
-| `collision_counter_topic` | string | `/collision_counter` | Published collision count topic. |
+| `people_collision_counter_topic` | string | `/people_collision_counter` | Published people collision count topic. |
+| `object_collision_counter_topic` | string | `/object_collision_counter` | Published object collision count topic. |
 | `goal_available_topic` | string | `/goal_available` | Resets the collision counter when a `True` message is received. |
 
 ### Interfaces
@@ -86,7 +89,8 @@ The node requests the OctoMap once at startup. If you do not have an OctoMap ser
 | `/odom` | `nav_msgs/msg/Odometry` | Subscriber |
 | `/pedsim_simulator/simulated_agents` | `pedsim_msgs/msg/AgentStates` | Subscriber |
 | `/goal_available` | `std_msgs/msg/Bool` | Subscriber |
-| `/collision_counter` | `std_msgs/msg/Int32` | Publisher |
+| `/people_collision_counter` | `std_msgs/msg/Int32` | Publisher |
+| `/object_collision_counter` | `std_msgs/msg/Int32` | Publisher |
 | `/octomap_full` | `octomap_msgs/srv/GetOctomap` | Client |
 
 ## Build With Colcon
@@ -154,7 +158,8 @@ metrics_recorder_node:
     goal_reached_topic: "/smf_move_base_planner/goal_reached"
     goal_available_topic: "/goal_available"
     save_metrics_topic: "/save_metrics"
-    collision_counter_topic: "/collision_counter"
+    people_collision_counter_topic: "/people_collision_counter"
+    object_collision_counter_topic: "/object_collision_counter"
     num_nodes_topic: "/smf_move_base_planner/smf_num_nodes"
     agent_states_topic: "/pedsim_simulator/simulated_agents"
     odom_topic: "/odom"
@@ -174,7 +179,8 @@ collision_counter_node:
   ros__parameters:
     odom_topic: "/odom"
     agent_states_topic: "/pedsim_simulator/simulated_agents"
-    collision_counter_topic: "/collision_counter"
+    people_collision_counter_topic: "/people_collision_counter"
+    object_collision_counter_topic: "/object_collision_counter"
     goal_available_topic: "/goal_available"
     octomap_service: "/octomap_full"
 

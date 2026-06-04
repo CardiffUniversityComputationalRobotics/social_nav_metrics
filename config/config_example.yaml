@@ -5,7 +5,8 @@ metrics_recorder_node:
     goal_reached_topic: "/smf_move_base_planner/goal_reached"
     goal_available_topic: "/goal_available"
     save_metrics_topic: "/save_metrics"
-    collision_counter_topic: "/collision_counter"
+    people_collision_counter_topic: "/people_collision_counter"
+    object_collision_counter_topic: "/object_collision_counter"
     num_nodes_topic: "/smf_move_base_planner/smf_num_nodes" # only considered if the approach is sampling based
     agent_states_topic: "/pedsim_simulator/simulated_agents"
     odom_topic: "/odom"
@@ -29,7 +30,8 @@ collision_counter_node:
     # !TOPICS
     odom_topic: "/odom"
     agent_states_topic: "/pedsim_simulator/simulated_agents"
-    collision_counter_topic: "/collision_counter"
+    people_collision_counter_topic: "/people_collision_counter"
+    object_collision_counter_topic: "/object_collision_counter"
     goal_available_topic: "/goal_available"
 
     # octomap service

@@ -33,7 +33,8 @@ class MetricsRecorder(Node):
                 ("odom_topic", "/odom"),
                 ("num_nodes_topic", "/num_nodes"),
                 ("agent_states_topic", "/pedsim_simulator/simulated_agents"),
-                ("collision_counter_topic", "/collision_counter"),
+                ("people_collision_counter_topic", "/people_collision_counter"),
+                ("object_collision_counter_topic", "/object_collision_counter"),
                 ("measure_rate", 5.0),
                 ("robot_max_velocity", 1.0),
                 ("agent_max_velocity", 1.0),
@@ -72,8 +73,13 @@ class MetricsRecorder(Node):
         self.agent_states_topic_ = (
             self.get_parameter("agent_states_topic").get_parameter_value().string_value
         )
-        self.collision_counter_topic_ = (
-            self.get_parameter("collision_counter_topic")
+        self.people_collision_counter_topic_ = (
+            self.get_parameter("people_collision_counter_topic")
+            .get_parameter_value()
+            .string_value
+        )
+        self.object_collision_counter_topic_ = (
+            self.get_parameter("object_collision_counter_topic")
             .get_parameter_value()
             .string_value
         )
@@ -127,7 +133,8 @@ class MetricsRecorder(Node):
         self.sei_ = RunningAverage()
         self.ttc_ = RunningAverage()
         self.num_nodes_ = RunningAverage()
-        self.collision_counter_ = 0
+        self.people_collision_counter_ = 0
+        self.object_collision_counter_ = 0
         self.goal_reached_ = 0
         self.current_num_nodes_ = None
 
@@ -190,8 +197,14 @@ class MetricsRecorder(Node):
         )
         self.create_subscription(
             Int32,
-            self.collision_counter_topic_,
-            self.collision_counter_callback,
+            self.people_collision_counter_topic_,
+            self.people_collision_counter_callback,
+            qos_profile,
+        )
+        self.create_subscription(
+            Int32,
+            self.object_collision_counter_topic_,
+            self.object_collision_counter_callback,
             qos_profile,
         )
         # ======================================================
@@ -206,7 +219,8 @@ class MetricsRecorder(Node):
             self.goal_available_
             or self.goal_reached_ == 1
             or self.total_time_ > 0
-            or self.collision_counter_ > 0
+            or self.people_collision_counter_ > 0
+            or self.object_collision_counter_ > 0
             or self.path_length_ > 0
             or self.in_place_rotation_ > 0
             or len(self.rmi_) > 0
@@ -222,7 +236,8 @@ class MetricsRecorder(Node):
         """Reset the recorder after saving so a new goal starts a new session."""
         self.goal_available_ = False
         self.goal_reached_ = 0
-        self.collision_counter_ = 0
+        self.people_collision_counter_ = 0
+        self.object_collision_counter_ = 0
         self.total_time_ = 0.0
         self.init_query_time_ = 0.0
         self.last_time_ = 0.0
@@ -302,9 +317,13 @@ class MetricsRecorder(Node):
         """Listens to the gazebo clock time if simulation is running."""
         self.current_time_ = msg.clock.sec + msg.clock.nanosec / 1e9
 
-    def collision_counter_callback(self, msg: Int32):
-        """Listens to the amount of collisions happening by an external node."""
-        self.collision_counter_ = msg.data
+    def people_collision_counter_callback(self, msg: Int32):
+        """Listens to the amount of collisions with people."""
+        self.people_collision_counter_ = msg.data
+
+    def object_collision_counter_callback(self, msg: Int32):
+        """Listens to the amount of collisions with objects."""
+        self.object_collision_counter_ = msg.data
 
     def num_nodes_callback(self, msg: Int32):
         """Listens to the number of nodes sampled for the case of sampling based techniques"""
