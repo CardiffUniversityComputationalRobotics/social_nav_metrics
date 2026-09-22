@@ -23,7 +23,13 @@
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
 
-  <!-- PEDSIM DEPS -->
+  <depend>geometry_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>libfcl-dev</depend>
+  <exec_depend>python3-numpy</exec_depend>
+
+  <!-- Not on rosdep: build pedsim_msgs from source, see README -->
   <depend>pedsim_msgs</depend>
   <depend>octomap</depend>
   <depend>octomap_msgs</depend>

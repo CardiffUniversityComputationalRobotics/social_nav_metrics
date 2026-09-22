@@ -1,0 +1,24 @@
+# Minimal config for the no-simulator quick test in the README.
+# Uses wall time (sim: False) and plain topic names, so nothing but
+# metrics_recorder_node and fake_scenario.py needs to be running.
+metrics_recorder_node:
+  ros__parameters:
+    # !TOPICS
+    goal_available_topic: "/goal_available"
+    goal_reached_topic: "/goal_reached"
+    save_metrics_topic: "/save_metrics"
+    agent_states_topic: "/pedsim_simulator/simulated_agents"
+    odom_topic: "/odom"
+
+    # ! measuring characteristics
+    measure_rate: 10.0
+    sim: False # wall time: no /clock publisher needed
+    robot_max_velocity: 1.0
+    agent_max_velocity: 1.0
+    robot_radius: 0.3
+    agent_radius: 0.45
+
+    #! saving files config
+    csv_dir: "/tmp/social_nav_metrics"
+    approach_name: "quick_test"
+    csv_name: "quick_test.csv"
