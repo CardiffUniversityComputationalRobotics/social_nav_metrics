@@ -122,7 +122,7 @@ The node requests the OctoMap once at startup. If you do not have an OctoMap ser
 
 ## Dependencies
 
-This branch targets ROS 2 Humble. It also builds and runs unchanged on ROS 2 Jazzy; substitute your distro name in the commands below.
+This branch targets ROS 2 Jazzy.
 
 ### Binary dependencies
 
@@ -130,9 +130,9 @@ Every dependency except `pedsim_msgs` ships as a binary package:
 
 ```bash
 sudo apt install \
-  ros-humble-octomap ros-humble-octomap-msgs ros-humble-octomap-server \
-  ros-humble-tf-transformations ros-humble-tf2 ros-humble-tf2-ros \
-  ros-humble-geometry-msgs ros-humble-nav-msgs ros-humble-rosgraph-msgs \
+  ros-jazzy-octomap ros-jazzy-octomap-msgs ros-jazzy-octomap-server \
+  ros-jazzy-tf-transformations ros-jazzy-tf2 ros-jazzy-tf2-ros \
+  ros-jazzy-geometry-msgs ros-jazzy-nav-msgs ros-jazzy-rosgraph-msgs \
   libfcl-dev python3-numpy python3-transforms3d
 ```
 
@@ -160,7 +160,7 @@ Only `pedsim_msgs` is needed to build and run this package. The rest of `pedsim_
 Source your ROS 2 installation first:
 
 ```bash
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash
 ```
 
 Then build in the workspace:
