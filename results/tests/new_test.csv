@@ -1,4 +1,0 @@
-test_number,time,goal_reached,average_sii,average_rmi,total_time,average_cpu,collision_counter,num_nodes,path_irregularity,acc_per_segment,path_length
-1,12/06/2024 10:51:14,0,nan,nan,0.0,nan,0,0,nan,nan,0
-2,12/06/2024 11:55:18,0,0.4485,2.7016,0.0,nan,2,0,4.0483,1.2512,0.8098072318770533
-3,12/06/2024 11:59:56,1,0.2698,2.2394,58.232,nan,7,0,5.8865,1.7938,3.758395591325499
