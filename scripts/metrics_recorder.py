@@ -326,7 +326,11 @@ class MetricsRecorder(Node):
         self.object_collision_counter_ = msg.data
 
     def num_nodes_callback(self, msg: Int32):
-        """Listens to the number of nodes sampled for the case of sampling based techniques"""
+        """Listens to the number of nodes a sampling-based planner expanded.
+
+        These are the planner's search-tree or roadmap nodes (RRT, RRT*, PRM
+        and similar), used as a planning-effort metric.
+        """
         self.current_num_nodes_ = msg.data
 
     def odom_callback(self, odom: Odometry):
@@ -347,9 +351,8 @@ def main(args=None):
     except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         metrics_recorder_node.save_current_metrics()
     finally:
+        metrics_recorder_node.destroy_node()
         rclpy.try_shutdown()
-    metrics_recorder_node.destroy_node()
-    rclpy.shutdown()
 
 
 if __name__ == "__main__":

@@ -6,8 +6,8 @@ metrics_recorder_node:
     goal_available_topic: "/goal_available"
     save_metrics_topic: "/save_metrics"
     people_collision_counter_topic: "/people_collision_counter"
-    object_collision_counter_topic: "/object_collision_counter"
-    num_nodes_topic: "/smf_move_base_planner/smf_num_nodes" # only considered if the approach is sampling based
+    object_collision_counter_topic: "/object_collision_counter" # nodes expanded in the planner's search tree/roadmap
+    num_nodes_topic: "/smf_move_base_planner/smf_num_nodes"
     agent_states_topic: "/pedsim_simulator/simulated_agents"
     odom_topic: "/odom"
 
